@@ -1,0 +1,18 @@
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ARG TARGETARCH
+WORKDIR /source
+
+# Copy toàn bộ solution vào container
+COPY . ./
+
+# Di chuyển vào thư mục project chính (nếu bạn chỉ có 1 project)
+WORKDIR /source/aspnetapp
+
+# Restore sử dụng kiến trúc đúng
+RUN dotnet restore -a $TARGETARCH
+
+# Build project
+RUN dotnet build --no-restore
+
+# Test project (nếu có project test riêng thì cd sang và test, hoặc test ngay nếu tích hợp)
+RUN dotnet test --no-build --logger:"console;verbosity=detailed"
