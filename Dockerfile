@@ -10,7 +10,7 @@ RUN dotnet restore
 
 # Copy toàn bộ source và publish
 COPY aspnetapp/. .
-RUN dotnet publish -c Release -a $TARGETARCH --no-restore -o /app
+RUN dotnet publish -c Release --runtime $TARGETARCH --no-restore -o /app
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
