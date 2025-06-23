@@ -44,11 +44,11 @@ pipeline {
             agent { label 'agent1' }
             steps {
                 script {
-                    def arch = 'linux-x64'
+                    //def arch = ''
                     sh """
                     docker buildx build \
                         --platform linux/amd64 \
-                        --build-arg TARGETARCH=${arch} \
+                        --build-arg TARGETARCH=linux-x64 \
                         -t ${IMAGE_NAME}:${env.BUILD_NUMBER} \
                         -f Dockerfile .
                     """

@@ -4,13 +4,13 @@ FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG TARGETARCH
 WORKDIR /source
 
-# Copy project file and restore as distinct layers
-COPY aspnetapp/*.csproj .
-RUN dotnet restore $TARGETARCH
+# Copy project file and restore
+COPY aspnetapp/aspnetapp.csproj .
+RUN dotnet restore
 
-# Copy source code and publish app
+# Copy toàn bộ source và publish
 COPY aspnetapp/. .
-RUN dotnet publish -a $TARGETARCH --no-restore -o /app
+RUN dotnet publish -c Release -a $TARGETARCH --no-restore -o /app
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
