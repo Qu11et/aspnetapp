@@ -12,7 +12,6 @@ RUN dotnet restore -a $TARGETARCH
 COPY --link aspnetapp/. .
 RUN dotnet publish -a $TARGETARCH --no-restore -o /app
 
-
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 EXPOSE 8080

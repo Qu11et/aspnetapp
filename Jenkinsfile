@@ -25,7 +25,7 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            agent { label 'agent1' }
+            agent { label 'agent-builder' }
             steps {
                 // Lấy nhánh hiện tại
                 script {
@@ -41,35 +41,29 @@ pipeline {
         }
 
         stage('Build') {
-            agent { label 'agent1' }
+            agent { label 'agent-builder' }
             steps {
                 script {
-                    def arch = 'linux-x64'
+                    //def arch = ''
                     sh """
-                    docker buildx build \
-                        --platform linux/amd64 \
-                        --build-arg TARGETARCH=${arch} \
-                        -t ${IMAGE_NAME}:${env.BUILD_NUMBER} \
-                        -f Dockerfile .
+                    docker build --pull -t ${IMAGE_NAME}:${env.BUILD_NUMBER} .
                     """
                 }
             }
         }
 
         stage('Test') {
-            agent { label 'agent1' }
+            agent { label 'agent-builder' }
             steps {
                 sh """
-                docker buildx build \
-                    --platform linux/amd64 \
-                    --build-arg TARGETARCH=linux-x64 \
-                    -f Dockerfile.test .
+                docker build -t aspnetapp-test -f Dockerfile.test .
+                docker images | grep aspnetapp-test
                 """
             }
         }
 
         stage('Push to Docker Hub') {
-            agent { label 'agent1' }
+            agent { label 'agent-builder' }
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh """
@@ -83,7 +77,7 @@ pipeline {
         stage('Deploy to Dev') {
             agent { label 'agent1' }
             environment {
-                CONTAINER_PORT = '8081'
+                CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
                 branch 'dev'
@@ -116,9 +110,9 @@ EOF
         }
 
         stage('Deploy to Prod') {
-            agent { label 'agent1' }
+            agent { label 'agent2' }
             environment {
-                CONTAINER_PORT = '8080'
+                CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
                 branch 'main'
