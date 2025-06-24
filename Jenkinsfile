@@ -27,7 +27,7 @@ pipeline {
         stage('Checkout') {
             agent { label 'agent-builder' }
             steps {
-                // Lấy nhánh hiện tại
+                // Lấy nhánh hiện tại demo 1
                 script {
                     env.CURRENT_BRANCH = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'dev'
                 }
