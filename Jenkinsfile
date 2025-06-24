@@ -46,11 +46,8 @@ pipeline {
                 script {
                     //def arch = ''
                     sh """
-                    docker buildx build \
-                        --platform linux/amd64 \
-                        --build-arg TARGETARCH=linux-x64 \
-                        -t ${IMAGE_NAME}:${env.BUILD_NUMBER} \
-                        -f Dockerfile .
+                    cd aspnetapp/
+                    docker build --pull -t ${IMAGE_NAME}:${env.BUILD_NUMBER} .
                     """
                 }
             }
@@ -60,10 +57,8 @@ pipeline {
             agent { label 'agent1' }
             steps {
                 sh """
-                docker buildx build \
-                    --platform linux/amd64 \
-                    --build-arg TARGETARCH=linux-x64 \
-                    -f Dockerfile.test .
+                docker build -t aspnetapp-test -f Dockerfile.test .
+                docker images | grep aspnetapp-test
                 """
             }
         }
