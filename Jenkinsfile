@@ -46,7 +46,6 @@ pipeline {
                 script {
                     //def arch = ''
                     sh """
-                    cd aspnetapp/
                     docker build --pull -t ${IMAGE_NAME}:${env.BUILD_NUMBER} .
                     """
                 }
