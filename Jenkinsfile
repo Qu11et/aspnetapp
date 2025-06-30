@@ -7,8 +7,8 @@ pipeline {
         DEPLOY_DIR = "/home/TaiKhau/app"
 
         // IP của GCP VMs
-        GCP_VM_DEV = '34.126.143.226'
-        GCP_VM_PROD = '34.143.235.29'
+        GCP_VM_DEV = '34.142.138.182'
+        GCP_VM_PROD = '34.142.133.202'
 
         // Docker Hub
         DOCKER_HUB_CREDS = credentials('dockerhub-credentials')
@@ -20,20 +20,32 @@ pipeline {
     }
 
     triggers {
-        githubPush()
+        // Change from githubPush to pull request trigger
+        pullRequestBuildTrigger {
+            allowedBranches 'develop,main'
+            pullRequestStatus 'open'
+        }
     }
 
     stages {
         stage('Checkout') {
             agent { label 'agent-builder' }
             steps {
-                // Lấy nhánh hiện tại demo 1
                 script {
-                    env.CURRENT_BRANCH = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'dev'
+                    // Get the target branch (where PR is going to)
+                    env.TARGET_BRANCH = env.CHANGE_TARGET ?: env.BRANCH_NAME
+                    
+                    // Verify we're in a PR context and targeting allowed branches
+                    if (!env.CHANGE_ID) {
+                        error "This pipeline should only run on pull requests"
+                    }
+                    if (!(env.TARGET_BRANCH in ['develop', 'main'])) {
+                        error "Pull requests are only allowed to develop or main branches"
+                    }
                 }
 
-                // Clone với token an toàn
-                git branch: "${env.CURRENT_BRANCH}", url: "https://Qu11et:${GITHUB_TOKEN}@github.com/Qu11et/aspnetapp.git"
+                // Clone with secure token
+                git branch: "${env.TARGET_BRANCH}", url: "https://Qu11et:${GITHUB_TOKEN}@github.com/Qu11et/aspnetapp.git"
 
                 sh 'ls -la'
                 sh 'pwd'
@@ -44,7 +56,6 @@ pipeline {
             agent { label 'agent-builder' }
             steps {
                 script {
-                    //def arch = ''
                     sh """
                     docker build --pull -t ${IMAGE_NAME}:${env.BUILD_NUMBER} .
                     """
@@ -80,7 +91,10 @@ pipeline {
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'dev'
+                allOf {
+                    expression { env.CHANGE_ID != null } // Is PR
+                    expression { env.TARGET_BRANCH == 'develop' } // PR targeting develop
+                }
             }
             steps {
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
@@ -115,10 +129,13 @@ EOF
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'main'
+                allOf {
+                    expression { env.CHANGE_ID != null } // Is PR
+                    expression { env.TARGET_BRANCH == 'main' } // PR targeting main
+                }
             }
             steps {
-                input message: "Bạn có chắc muốn deploy lên môi trường Production?"
+                input message: "Do you want to proceed with Production deployment?"
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
