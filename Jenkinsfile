@@ -20,12 +20,24 @@ pipeline {
     }
 
     triggers {
+        pullRequest {
+            targetBranches(['main', 'develop'])
+        }
+        // Also trigger on pushes to main and develop branches for deployment
         githubPush()
     }
 
     stages {
         stage('Checkout') {
             agent { label 'agent-builder' }
+            when {
+                anyOf {
+                    changeRequest target: 'main'
+                    changeRequest target: 'develop'
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 // Lấy nhánh hiện tại demo 1
                 script {
@@ -42,6 +54,14 @@ pipeline {
 
         stage('Build') {
             agent { label 'agent-builder' }
+            when {
+                anyOf {
+                    changeRequest target: 'main'
+                    changeRequest target: 'develop'
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 script {
                     //def arch = ''
@@ -54,6 +74,14 @@ pipeline {
 
         stage('Test') {
             agent { label 'agent-builder' }
+            when {
+                anyOf {
+                    changeRequest target: 'main'
+                    changeRequest target: 'develop'
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 sh """
                 docker build -t aspnetapp-test -f Dockerfile.test .
@@ -64,6 +92,14 @@ pipeline {
 
         stage('Push to Docker Hub') {
             agent { label 'agent-builder' }
+            when {
+                anyOf {
+                    changeRequest target: 'main'
+                    changeRequest target: 'develop'
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh """
@@ -80,7 +116,10 @@ pipeline {
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'dev'
+                allOf {
+                    not { changeRequest() }
+                    branch 'develop'
+                }
             }
             steps {
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
@@ -115,7 +154,10 @@ EOF
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'main'
+                allOf {
+                    not { changeRequest() }
+                    branch 'main'
+                }
             }
             steps {
                 input message: "Bạn có chắc muốn deploy lên môi trường Production?"
