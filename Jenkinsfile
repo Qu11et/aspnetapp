@@ -23,8 +23,6 @@ pipeline {
         pullRequest {
             targetBranches(['main', 'develop'])
         }
-        // Also trigger on pushes to main and develop branches for deployment
-        githubPush()
     }
 
     stages {
@@ -34,8 +32,6 @@ pipeline {
                 anyOf {
                     changeRequest target: 'main'
                     changeRequest target: 'develop'
-                    branch 'main'
-                    branch 'develop'
                 }
             }
             steps {
@@ -58,8 +54,6 @@ pipeline {
                 anyOf {
                     changeRequest target: 'main'
                     changeRequest target: 'develop'
-                    branch 'main'
-                    branch 'develop'
                 }
             }
             steps {
@@ -78,8 +72,6 @@ pipeline {
                 anyOf {
                     changeRequest target: 'main'
                     changeRequest target: 'develop'
-                    branch 'main'
-                    branch 'develop'
                 }
             }
             steps {
@@ -96,8 +88,6 @@ pipeline {
                 anyOf {
                     changeRequest target: 'main'
                     changeRequest target: 'develop'
-                    branch 'main'
-                    branch 'develop'
                 }
             }
             steps {
@@ -117,8 +107,9 @@ pipeline {
             }
             when {
                 allOf {
-                    not { changeRequest() }
-                    branch 'develop'
+                    changeRequest target: 'develop'
+                    // Add additional conditions for deployment gating
+                    // e.g., PR approval status, specific labels, etc.
                 }
             }
             steps {
@@ -155,8 +146,9 @@ EOF
             }
             when {
                 allOf {
-                    not { changeRequest() }
-                    branch 'main'
+                    changeRequest target: 'main'
+                    // Add additional conditions for deployment gating
+                    // e.g., PR approval status, specific labels, etc.
                 }
             }
             steps {
