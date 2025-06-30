@@ -19,31 +19,35 @@ pipeline {
         GITHUB_TOKEN = credentials('github-token')
     }
 
-    triggers {
-        // Change from githubPush to pull request trigger
-        pullRequestBuildTrigger {
-            allowedBranches 'develop,main'
-            pullRequestStatus 'open'
-        }
-    }
+    // Remove explicit triggers - Jenkins will handle this through GitHub Branch Source Plugin
+    // The plugin automatically detects pull requests and branch events
 
     stages {
-        stage('Checkout') {
+        stage('Verify PR Context') {
             agent { label 'agent-builder' }
             steps {
                 script {
                     // Get the target branch (where PR is going to)
                     env.TARGET_BRANCH = env.CHANGE_TARGET ?: env.BRANCH_NAME
                     
-                    // Verify we're in a PR context and targeting allowed branches
+                    // Check if we're in a PR context
                     if (!env.CHANGE_ID) {
                         error "This pipeline should only run on pull requests"
                     }
+                    
+                    // Check if PR is targeting allowed branches
                     if (!(env.TARGET_BRANCH in ['develop', 'main'])) {
                         error "Pull requests are only allowed to develop or main branches"
                     }
+                    
+                    echo "Processing pull request #${env.CHANGE_ID} targeting ${env.TARGET_BRANCH}"
                 }
+            }
+        }
 
+        stage('Checkout') {
+            agent { label 'agent-builder' }
+            steps {
                 // Clone with secure token
                 git branch: "${env.TARGET_BRANCH}", url: "https://Qu11et:${GITHUB_TOKEN}@github.com/Qu11et/aspnetapp.git"
 
