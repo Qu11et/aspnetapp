@@ -20,20 +20,38 @@ pipeline {
     }
 
     triggers {
-        githubPush()
+        // Standard triggers that work with GitHub Branch Source Plugin
+        // Automatically triggered by GitHub webhooks via the plugin
+        // No explicit pullRequestBuildTrigger needed - handled by the plugin
+        // This replaces pullRequestBuildTrigger with standard Jenkins pipeline triggers
     }
 
     stages {
-        stage('Checkout') {
+        stage('Environment Setup') {
             agent { label 'agent-builder' }
             steps {
-                // Lấy nhánh hiện tại demo 1
                 script {
-                    env.CURRENT_BRANCH = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'dev'
+                    // Use built-in Jenkins environment variables for pull request detection
+                    // CHANGE_ID is set by GitHub Branch Source Plugin for PR builds
+                    // This replaces custom pullRequestBuildTrigger logic
+                    if (env.CHANGE_ID) {
+                        echo "This is a Pull Request build. PR ID: ${env.CHANGE_ID}"
+                        echo "PR Target Branch: ${env.CHANGE_TARGET}"
+                        echo "PR Source Branch: ${env.CHANGE_BRANCH}"
+                        env.IS_PR = 'true'
+                        env.CURRENT_BRANCH = env.CHANGE_BRANCH
+                    } else {
+                        echo "This is a regular branch build"
+                        env.IS_PR = 'false'
+                        env.CURRENT_BRANCH = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'dev'
+                    }
+                    echo "Current branch: ${env.CURRENT_BRANCH}"
+                    echo "Is PR: ${env.IS_PR}"
                 }
 
-                // Clone với token an toàn
-                git branch: "${env.CURRENT_BRANCH}", url: "https://Qu11et:${GITHUB_TOKEN}@github.com/Qu11et/aspnetapp.git"
+                // GitHub Branch Source Plugin handles repository checkout automatically
+                // Using 'checkout scm' for compatibility with the plugin
+                checkout scm
 
                 sh 'ls -la'
                 sh 'pwd'
@@ -74,13 +92,35 @@ pipeline {
             }
         }
 
+        stage('PR Status Update') {
+            agent { label 'agent-builder' }
+            when {
+                environment name: 'IS_PR', value: 'true'
+            }
+            steps {
+                script {
+                    echo "Pull Request build completed successfully!"
+                    echo "PR ${env.CHANGE_ID}: ${env.CHANGE_TITLE}"
+                    echo "Source: ${env.CHANGE_BRANCH} -> Target: ${env.CHANGE_TARGET}"
+                    echo "Build and tests passed. Ready for review."
+                }
+            }
+        }
+
         stage('Deploy to Dev') {
             agent { label 'agent1' }
             environment {
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'dev'
+                allOf {
+                    branch 'dev'
+                    // Only deploy on actual branch builds, not PR builds
+                    // This maintains the same deployment logic but excludes PRs
+                    not { 
+                        environment name: 'IS_PR', value: 'true' 
+                    }
+                }
             }
             steps {
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
@@ -115,7 +155,14 @@ EOF
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'main'
+                allOf {
+                    branch 'main'
+                    // Only deploy on actual branch builds, not PR builds
+                    // This maintains the same deployment logic but excludes PRs
+                    not { 
+                        environment name: 'IS_PR', value: 'true' 
+                    }
+                }
             }
             steps {
                 input message: "Bạn có chắc muốn deploy lên môi trường Production?"
