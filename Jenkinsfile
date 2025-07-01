@@ -173,32 +173,36 @@ EOF
     
     post {
         success {
-            script {
-                if (env.CHANGE_ID) {
-                    // Cập nhật trạng thái GitHub - Thành công
-                    step([
-                        $class: 'GitHubCommitStatusSetter',
-                        reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
-                        contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
-                        statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
-                            [$class: 'AnyBuildResult', message: 'Build succeeded', state: 'SUCCESS']
-                        ]]
-                    ])
+            node('agent-builder') { 
+                script {
+                    if (env.CHANGE_ID) {
+                        // Cập nhật trạng thái GitHub - Thành công
+                        step([
+                            $class: 'GitHubCommitStatusSetter',
+                            reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
+                            contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
+                            statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
+                                [$class: 'AnyBuildResult', message: 'Build succeeded', state: 'SUCCESS']
+                            ]]
+                        ])
+                    }
                 }
             }
         }
         failure {
-            script {
-                if (env.CHANGE_ID) {
-                    // Cập nhật trạng thái GitHub - Thất bại
-                    step([
-                        $class: 'GitHubCommitStatusSetter',
-                        reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
-                        contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
-                        statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
-                            [$class: 'AnyBuildResult', message: 'Build failed', state: 'FAILURE']
-                        ]]
-                    ])
+            node('agent-builder') { 
+                script {
+                    if (env.CHANGE_ID) {
+                        // Cập nhật trạng thái GitHub - Thất bại
+                        step([
+                            $class: 'GitHubCommitStatusSetter',
+                            reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
+                            contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
+                            statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
+                                [$class: 'AnyBuildResult', message: 'Build failed', state: 'FAILURE']
+                            ]]
+                        ])
+                    }
                 }
             }
         }
