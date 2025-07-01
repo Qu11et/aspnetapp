@@ -24,11 +24,11 @@ pipeline {
     }
 
     stages {
-        stage('Initialize') {
+        stage('Initialize & Validate') {
             agent { label 'agent-builder' }
             steps {
                 script {
-                    // Debug: In ra tất cả environment variables liên quan đến PR
+                    // Debug: In ra tất cả environment variables
                     echo "=== DEBUG: Environment Variables ==="
                     echo "BRANCH_NAME: ${env.BRANCH_NAME}"
                     echo "CHANGE_ID: ${env.CHANGE_ID}"
@@ -39,67 +39,98 @@ pipeline {
                     echo "BUILD_NUMBER: ${env.BUILD_NUMBER}"
                     echo "JOB_NAME: ${env.JOB_NAME}"
                     
-                    // Xác định context: PR hoặc branch thông thường
+                    // Xác định build context
                     def isPullRequest = env.CHANGE_ID != null
-                    def isFeatureBranch = env.BRANCH_NAME?.startsWith('feature/')
-                    def isDevelopBranch = env.BRANCH_NAME == 'develop'
-                    def isMainBranch = env.BRANCH_NAME == 'main'
+                    def isDirectPush = !isPullRequest
                     
-                    echo "=== BUILD CONTEXT ==="
+                    echo "=== BUILD CONTEXT ANALYSIS ==="
                     echo "Is Pull Request: ${isPullRequest}"
-                    echo "Is Feature Branch: ${isFeatureBranch}"
-                    echo "Is Develop Branch: ${isDevelopBranch}"
-                    echo "Is Main Branch: ${isMainBranch}"
+                    echo "Is Direct Push: ${isDirectPush}"
                     
-                    // Xác định target branch và deployment environment
                     if (isPullRequest) {
-                        // Đây là Pull Request
-                        env.TARGET_BRANCH = env.CHANGE_TARGET
+                        // ========== PULL REQUEST CONTEXT ==========
                         env.SOURCE_BRANCH = env.CHANGE_BRANCH
-                        env.BUILD_TYPE = 'PR'
+                        env.TARGET_BRANCH = env.CHANGE_TARGET
+                        env.BUILD_TYPE = 'PULL_REQUEST'
                         
-                        echo "Processing Pull Request #${env.CHANGE_ID}"
-                        echo "Source: ${env.SOURCE_BRANCH} → Target: ${env.TARGET_BRANCH}"
+                        echo "Pull Request Details:"
+                        echo "  PR #${env.CHANGE_ID}"
+                        echo "  Source: ${env.SOURCE_BRANCH}"
+                        echo "  Target: ${env.TARGET_BRANCH}"
+                        echo "  Author: ${env.CHANGE_AUTHOR}"
+                        echo "  Title: ${env.CHANGE_TITLE}"
                         
-                    } else if (isDevelopBranch) {
-                        // Push trực tiếp đến develop
-                        env.TARGET_BRANCH = 'develop'
-                        env.SOURCE_BRANCH = 'develop'
-                        env.BUILD_TYPE = 'DIRECT_PUSH'
-                        
-                    } else if (isMainBranch) {
-                        // Push trực tiếp đến main
-                        env.TARGET_BRANCH = 'main'
-                        env.SOURCE_BRANCH = 'main'
-                        env.BUILD_TYPE = 'DIRECT_PUSH'
+                        // Validate PR target branch
+                        if (env.TARGET_BRANCH == 'develop') {
+                            env.DEPLOYMENT_ENV = 'development'
+                            env.DEPLOY_PORT = env.DEV_PORT
+                            env.SHOULD_DEPLOY = 'true'
+                            env.VM_IP = env.GCP_VM_DEV
+                            env.CONTAINER_NAME = 'aspnetapp-dev'
+                            env.AGENT_LABEL = 'agent1'
+                        } else if (env.TARGET_BRANCH == 'main') {
+                            env.DEPLOYMENT_ENV = 'production'
+                            env.DEPLOY_PORT = env.PROD_PORT
+                            env.SHOULD_DEPLOY = 'true'
+                            env.VM_IP = env.GCP_VM_PROD
+                            env.CONTAINER_NAME = 'aspnetapp-prod'
+                            env.AGENT_LABEL = 'agent2'
+                        } else {
+                            error "Pull Requests are only allowed to target 'develop' or 'main' branches. Current target: ${env.TARGET_BRANCH}"
+                        }
                         
                     } else {
-                        // Feature branch - chỉ build, không deploy
-                        env.TARGET_BRANCH = 'none'
+                        // ========== DIRECT PUSH CONTEXT ==========
                         env.SOURCE_BRANCH = env.BRANCH_NAME
-                        env.BUILD_TYPE = 'FEATURE_BUILD'
+                        env.TARGET_BRANCH = env.BRANCH_NAME
+                        
+                        echo "Direct Push Details:"
+                        echo "  Branch: ${env.BRANCH_NAME}"
+                        
+                        if (env.BRANCH_NAME == 'develop') {
+                            env.BUILD_TYPE = 'DIRECT_PUSH_DEV'
+                            env.DEPLOYMENT_ENV = 'development'
+                            env.DEPLOY_PORT = env.DEV_PORT
+                            env.SHOULD_DEPLOY = 'true'
+                            env.VM_IP = env.GCP_VM_DEV
+                            env.CONTAINER_NAME = 'aspnetapp-dev'
+                            env.AGENT_LABEL = 'agent1'
+                        } else if (env.BRANCH_NAME == 'main') {
+                            // Chặn direct push vào main
+                            error "Direct push to 'main' branch is not allowed. Please create a Pull Request."
+                        } else if (env.BRANCH_NAME?.startsWith('feature/') || env.BRANCH_NAME?.startsWith('hotfix/') || env.BRANCH_NAME?.startsWith('bugfix/')) {
+                            // Feature branches - Skip pipeline
+                            echo "Feature/Hotfix/Bugfix branch detected: ${env.BRANCH_NAME}"
+                            echo "Skipping pipeline execution as per configuration."
+                            currentBuild.result = 'ABORTED'
+                            error "Pipeline skipped for feature branch: ${env.BRANCH_NAME}"
+                        } else {
+                            // Other branches - không deploy
+                            env.BUILD_TYPE = 'BRANCH_BUILD'
+                            env.DEPLOYMENT_ENV = 'none'
+                            env.SHOULD_DEPLOY = 'false'
+                            echo "Branch '${env.BRANCH_NAME}' will be built but not deployed."
+                        }
                     }
                     
-                    // Set deployment parameters
-                    if (env.TARGET_BRANCH == 'develop') {
-                        env.DEPLOY_PORT = env.DEV_PORT
-                        env.DEPLOYMENT_ENV = 'development'
-                        env.SHOULD_DEPLOY = 'true'
-                    } else if (env.TARGET_BRANCH == 'main') {
-                        env.DEPLOY_PORT = env.PROD_PORT
-                        env.DEPLOYMENT_ENV = 'production'
-                        env.SHOULD_DEPLOY = 'true'
+                    // Tạo image tag
+                    if (env.BUILD_TYPE == 'PULL_REQUEST') {
+                        env.IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
                     } else {
-                        env.SHOULD_DEPLOY = 'false'
-                        env.DEPLOYMENT_ENV = 'none'
+                        env.IMAGE_TAG = "${env.BRANCH_NAME.replaceAll('/', '-')}-${env.BUILD_NUMBER}"
                     }
                     
-                    echo "=== DEPLOYMENT CONFIG ==="
+                    // Summary
+                    echo "=== PIPELINE CONFIGURATION ==="
                     echo "Build Type: ${env.BUILD_TYPE}"
+                    echo "Source Branch: ${env.SOURCE_BRANCH}"
                     echo "Target Branch: ${env.TARGET_BRANCH}"
                     echo "Deployment Environment: ${env.DEPLOYMENT_ENV}"
                     echo "Should Deploy: ${env.SHOULD_DEPLOY}"
                     echo "Deploy Port: ${env.DEPLOY_PORT ?: 'N/A'}"
+                    echo "VM IP: ${env.VM_IP ?: 'N/A'}"
+                    echo "Container Name: ${env.CONTAINER_NAME ?: 'N/A'}"
+                    echo "Image Tag: ${env.IMAGE_TAG}"
                 }
             }
         }
@@ -110,172 +141,211 @@ pipeline {
                 script {
                     echo "Checking out source code..."
                     
-                    if (env.BUILD_TYPE == 'PR') {
-                        // Checkout PR merge commit
-                        echo "Checking out PR #${env.CHANGE_ID} merge commit"
-                        checkout scm
+                    if (env.BUILD_TYPE == 'PULL_REQUEST') {
+                        echo "Checking out PR #${env.CHANGE_ID} merge result"
                     } else {
-                        // Checkout branch thông thường
                         echo "Checking out branch: ${env.BRANCH_NAME}"
-                        checkout scm
                     }
+                    
+                    // Jenkins multibranch tự động checkout đúng code
+                    checkout scm
                 }
 
                 sh 'ls -la'
                 sh 'pwd'
                 sh 'git log --oneline -3'
-                sh 'git branch -a'
+                sh 'git status'
             }
         }
 
-        stage('Build') {
+        stage('Build Docker Image') {
             agent { label 'agent-builder' }
             steps {
                 script {
-                    // Tạo unique tag cho build
-                    if (env.BUILD_TYPE == 'PR') {
-                        env.IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
-                    } else {
-                        env.IMAGE_TAG = "${env.BRANCH_NAME.replaceAll('/', '-')}-${env.BUILD_NUMBER}"
-                    }
-                    
                     echo "Building Docker image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
                     
                     sh """
                     docker build --pull -t ${IMAGE_NAME}:${env.IMAGE_TAG} .
                     """
                     
-                    // Tag thêm cho environment
-                    if (env.TARGET_BRANCH == 'develop') {
+                    // Tag environment-specific latest images
+                    if (env.DEPLOYMENT_ENV == 'development') {
                         sh "docker tag ${IMAGE_NAME}:${env.IMAGE_TAG} ${IMAGE_NAME}:dev-latest"
-                    } else if (env.TARGET_BRANCH == 'main') {
+                        echo "Tagged as dev-latest"
+                    } else if (env.DEPLOYMENT_ENV == 'production') {
                         sh "docker tag ${IMAGE_NAME}:${env.IMAGE_TAG} ${IMAGE_NAME}:prod-latest"
+                        echo "Tagged as prod-latest"
                     }
+                    
+                    // List built images
+                    sh "docker images | grep ${IMAGE_NAME}"
                 }
             }
         }
 
-        stage('Test') {
+        stage('Run Tests') {
             agent { label 'agent-builder' }
             steps {
                 script {
-                    echo "Running tests..."
+                    echo "Running application tests..."
+                    
                     sh """
-                    # Kiểm tra Dockerfile.test có tồn tại không
+                    # Kiểm tra có Dockerfile.test không
                     if [ -f "Dockerfile.test" ]; then
-                        echo "Building test image..."
+                        echo "Found Dockerfile.test - building test image..."
                         docker build -t aspnetapp-test -f Dockerfile.test .
                         
-                        echo "Running tests..."
+                        echo "Running tests in container..."
                         docker run --rm aspnetapp-test
-                    else
-                        echo "No Dockerfile.test found, skipping test container"
-                        echo "Running basic smoke test on main image..."
                         
-                        # Chạy container tạm thời để test
-                        docker run -d --name temp-test -p 18080:8080 ${IMAGE_NAME}:${env.IMAGE_TAG}
-                        sleep 10
+                        echo "Tests completed successfully"
+                    else
+                        echo "No Dockerfile.test found - running smoke test..."
+                        
+                        # Smoke test: khởi động container tạm thời
+                        echo "Starting container for smoke test..."
+                        docker run -d --name smoke-test-${env.BUILD_NUMBER} -p 18080:8080 ${IMAGE_NAME}:${env.IMAGE_TAG}
+                        
+                        # Đợi container khởi động
+                        sleep 15
                         
                         # Kiểm tra container có chạy không
-                        if docker ps | grep temp-test; then
-                            echo "Container started successfully"
+                        if docker ps | grep smoke-test-${env.BUILD_NUMBER}; then
+                            echo "✅ Smoke test passed - Container started successfully"
+                            
                             # Có thể thêm health check ở đây
-                            # curl -f http://localhost:18080/health || exit 1
+                            # docker exec smoke-test-${env.BUILD_NUMBER} curl -f http://localhost:8080/health || exit 1
                         else
-                            echo "Container failed to start"
-                            docker logs temp-test
+                            echo "❌ Smoke test failed - Container did not start properly"
+                            docker logs smoke-test-${env.BUILD_NUMBER}
                             exit 1
                         fi
                         
                         # Cleanup
-                        docker stop temp-test || true
-                        docker rm temp-test || true
+                        docker stop smoke-test-${env.BUILD_NUMBER} || true
+                        docker rm smoke-test-${env.BUILD_NUMBER} || true
                     fi
                     """
                 }
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Push to Docker Registry') {
             agent { label 'agent-builder' }
             when {
-                // Chỉ push khi build thành công và là PR hoặc main branches
+                // Chỉ push khi cần deploy hoặc là main branches
                 anyOf {
-                    expression { env.BUILD_TYPE == 'PR' }
-                    expression { env.BUILD_TYPE == 'DIRECT_PUSH' && env.TARGET_BRANCH in ['develop', 'main'] }
+                    expression { env.SHOULD_DEPLOY == 'true' }
+                    expression { env.BRANCH_NAME in ['develop', 'main'] }
                 }
             }
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh """
+                    echo "Logging in to Docker Hub..."
                     echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                     
-                    # Push specific tag
+                    echo "Pushing image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
                     docker push ${IMAGE_NAME}:${env.IMAGE_TAG}
                     
-                    # Push environment-specific latest tag if applicable
-                    if [ "${env.TARGET_BRANCH}" = "develop" ]; then
+                    # Push environment-specific latest tags
+                    if [ "${env.DEPLOYMENT_ENV}" = "development" ]; then
+                        echo "Pushing dev-latest tag..."
                         docker push ${IMAGE_NAME}:dev-latest
-                        echo "Pushed dev-latest tag"
-                    elif [ "${env.TARGET_BRANCH}" = "main" ]; then
+                    elif [ "${env.DEPLOYMENT_ENV}" = "production" ]; then
+                        echo "Pushing prod-latest tag..."
                         docker push ${IMAGE_NAME}:prod-latest
-                        echo "Pushed prod-latest tag"
                     fi
                     
-                    echo "Successfully pushed images to Docker Hub"
+                    echo "✅ Docker images pushed successfully"
                     """
                 }
             }
         }
 
-        stage('Deploy to Dev') {
-            agent { label 'agent1' }
+        stage('Deploy to Development') {
+            agent { 
+                label "${env.AGENT_LABEL ?: 'agent1'}" 
+            }
             when {
                 allOf {
                     expression { env.SHOULD_DEPLOY == 'true' }
-                    expression { env.TARGET_BRANCH == 'develop' }
+                    expression { env.DEPLOYMENT_ENV == 'development' }
                 }
             }
             steps {
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
-                        echo "Deploying to Development environment..."
+                        echo "🚀 Deploying to Development Environment"
                         echo "Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
+                        echo "Target VM: ${env.VM_IP}"
+                        echo "Port: ${env.DEPLOY_PORT}"
                         
                         sh """
-                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 \$SSH_USER@${GCP_VM_DEV} << 'EOF'
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${SSH_USER}@${env.VM_IP} << 'EOF'
 set -e
 trap 'echo "[ERROR] Dev deployment failed on \$HOSTNAME at \$(date)!" >&2; exit 1' ERR
 
-echo "[INFO] [\$(date)] Starting deployment to DEV environment..."
-echo "[INFO] Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
+echo "=================================================="
+echo "🚀 DEVELOPMENT DEPLOYMENT STARTED"
+echo "Time: \$(date)"
+echo "Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
+echo "Container: ${env.CONTAINER_NAME}"
+echo "Port: ${env.DEPLOY_PORT}"
+echo "=================================================="
 
-cd ${DEPLOY_DIR} || mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
+# Tạo deployment directory
+echo "[INFO] Preparing deployment directory..."
+mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
 
+# Pull image
 echo "[INFO] Pulling Docker image..."
 docker pull ${IMAGE_NAME}:${env.IMAGE_TAG}
 
+# Stop và remove container cũ
 echo "[INFO] Stopping existing container..."
-docker stop aspnetapp-dev 2>/dev/null || echo "No existing container to stop"
-docker rm aspnetapp-dev 2>/dev/null || echo "No existing container to remove"
+if docker ps -q -f name=${env.CONTAINER_NAME}; then
+    docker stop ${env.CONTAINER_NAME}
+    echo "[INFO] Stopped existing container: ${env.CONTAINER_NAME}"
+fi
 
-echo "[INFO] Starting new container..."
+echo "[INFO] Removing old container..."
+if docker ps -aq -f name=${env.CONTAINER_NAME}; then
+    docker rm ${env.CONTAINER_NAME}
+    echo "[INFO] Removed old container: ${env.CONTAINER_NAME}"
+fi
+
+# Start container mới
+echo "[INFO] Starting new development container..."
 docker run -d \\
     -p ${env.DEPLOY_PORT}:8080 \\
-    --name aspnetapp-dev \\
+    --name ${env.CONTAINER_NAME} \\
     --restart unless-stopped \\
     -e ASPNETCORE_ENVIRONMENT=Development \\
+    -e ASPNETCORE_URLS=http://+:8080 \\
     ${IMAGE_NAME}:${env.IMAGE_TAG}
 
-echo "[INFO] Waiting for container to be ready..."
+# Health check
+echo "[INFO] Performing health check..."
 sleep 10
 
-if docker ps -f name=aspnetapp-dev --format "table {{.Names}}\\t{{.Status}}" | grep -q "Up"; then
-    echo "[SUCCESS] [\$(date)] Dev deployment complete!"
-    echo "[INFO] Application running on http://\$(hostname -I | awk '{print \$1}'):${env.DEPLOY_PORT}"
+# Kiểm tra container status
+if docker ps -f name=${env.CONTAINER_NAME} --format "table {{.Names}}\\t{{.Status}}" | grep -q "Up"; then
+    CONTAINER_IP=\$(hostname -I | awk '{print \$1}')
+    echo ""
+    echo "=================================================="
+    echo "✅ DEVELOPMENT DEPLOYMENT SUCCESSFUL!"
+    echo "Time: \$(date)"
+    echo "Application URL: http://\$CONTAINER_IP:${env.DEPLOY_PORT}"
+    echo "Container Status: \$(docker ps -f name=${env.CONTAINER_NAME} --format '{{.Status}}')"
+    echo "=================================================="
 else
-    echo "[ERROR] Container failed to start"
-    docker logs aspnetapp-dev
+    echo ""
+    echo "=================================================="
+    echo "❌ DEPLOYMENT FAILED - Container not running"
+    echo "Container logs:"
+    docker logs ${env.CONTAINER_NAME}
+    echo "=================================================="
     exit 1
 fi
 EOF
@@ -285,81 +355,143 @@ EOF
             }
         }
 
-        stage('Deploy to Prod') {
-            agent { label 'agent2' }
+        stage('Deploy to Production') {
+            agent { 
+                label "${env.AGENT_LABEL ?: 'agent2'}" 
+            }
             when {
                 allOf {
                     expression { env.SHOULD_DEPLOY == 'true' }
-                    expression { env.TARGET_BRANCH == 'main' }
+                    expression { env.DEPLOYMENT_ENV == 'production' }
                 }
             }
             steps {
                 script {
-                    // Manual approval cho production
-                    timeout(time: 10, unit: 'MINUTES') {
-                        def deployApproved = input(
-                            message: "Deploy to Production?",
-                            ok: 'Deploy',
+                    // Production deployment approval
+                    echo "⚠️ Production deployment requested"
+                    echo "PR: #${env.CHANGE_ID} - ${env.CHANGE_TITLE}"
+                    echo "Author: ${env.CHANGE_AUTHOR}"
+                    echo "Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
+                    
+                    timeout(time: 15, unit: 'MINUTES') {
+                        def approval = input(
+                            message: "🚀 Deploy to Production?",
+                            ok: 'Deploy to Production',
                             parameters: [
-                                string(name: 'APPROVER', defaultValue: '', description: 'Your name for approval audit'),
-                                choice(name: 'DEPLOY_ACTION', choices: ['Deploy', 'Abort'], description: 'Deployment action')
+                                string(
+                                    name: 'APPROVER_NAME', 
+                                    defaultValue: '', 
+                                    description: 'Your full name for audit trail'
+                                ),
+                                choice(
+                                    name: 'APPROVAL_ACTION', 
+                                    choices: ['DEPLOY', 'CANCEL'], 
+                                    description: 'Deployment decision'
+                                ),
+                                text(
+                                    name: 'DEPLOYMENT_NOTES',
+                                    defaultValue: '',
+                                    description: 'Optional deployment notes'
+                                )
                             ]
                         )
                         
-                        if (deployApproved.DEPLOY_ACTION != 'Deploy') {
-                            error("Production deployment cancelled by ${deployApproved.APPROVER}")
+                        if (approval.APPROVAL_ACTION != 'DEPLOY') {
+                            error("❌ Production deployment cancelled by ${approval.APPROVER_NAME}")
                         }
                         
-                        echo "Production deployment approved by: ${deployApproved.APPROVER}"
+                        echo "✅ Production deployment approved by: ${approval.APPROVER_NAME}"
+                        if (approval.DEPLOYMENT_NOTES) {
+                            echo "📝 Deployment notes: ${approval.DEPLOYMENT_NOTES}"
+                        }
+                        
+                        env.APPROVER_NAME = approval.APPROVER_NAME
                     }
                 }
                 
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
-                        echo "Deploying to Production environment..."
-
-                        echo "Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
+                        echo "🚀 Deploying to Production Environment"
+                        echo "Approved by: ${env.APPROVER_NAME}"
                         
                         sh """
-                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 \$SSH_USER@${GCP_VM_PROD} << 'EOF'
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${SSH_USER}@${env.VM_IP} << 'EOF'
 set -e
 trap 'echo "[ERROR] Production deployment failed on \$HOSTNAME at \$(date)!" >&2; exit 1' ERR
 
-echo "[INFO] [\$(date)] Starting PRODUCTION deployment..."
-echo "[INFO] Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
+echo "=================================================="
+echo "🚀 PRODUCTION DEPLOYMENT STARTED"
+echo "Time: \$(date)"
+echo "Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
+echo "Container: ${env.CONTAINER_NAME}"
+echo "Port: ${env.DEPLOY_PORT}"
+echo "Approved by: ${env.APPROVER_NAME}"
+echo "=================================================="
 
-cd ${DEPLOY_DIR} || mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
+# Tạo deployment directory
+echo "[INFO] Preparing deployment directory..."
+mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
 
-echo "[INFO] Creating backup..."
-if docker ps -q -f name=aspnetapp-prod; then
-    docker commit aspnetapp-prod ${IMAGE_NAME}:backup-\$(date +%Y%m%d-%H%M%S) || echo "[WARN] Backup failed"
+# Backup current container
+echo "[INFO] Creating backup of current production container..."
+if docker ps -q -f name=${env.CONTAINER_NAME}; then
+    BACKUP_TAG="backup-\$(date +%Y%m%d-%H%M%S)"
+    docker commit ${env.CONTAINER_NAME} ${IMAGE_NAME}:\$BACKUP_TAG || echo "[WARN] Could not create backup"
+    echo "[INFO] Backup created: ${IMAGE_NAME}:\$BACKUP_TAG"
 fi
 
-echo "[INFO] Pulling Docker image..."
+# Pull new image
+echo "[INFO] Pulling new Docker image..."
 docker pull ${IMAGE_NAME}:${env.IMAGE_TAG}
 
-echo "[INFO] Stopping existing container..."
-docker stop aspnetapp-prod 2>/dev/null || echo "No existing container to stop"
-docker rm aspnetapp-prod 2>/dev/null || echo "No existing container to remove"
+# Stop current container
+echo "[INFO] Stopping current production container..."
+if docker ps -q -f name=${env.CONTAINER_NAME}; then
+    docker stop ${env.CONTAINER_NAME}
+    echo "[INFO] Stopped production container: ${env.CONTAINER_NAME}"
+fi
 
+echo "[INFO] Removing old container..."
+if docker ps -aq -f name=${env.CONTAINER_NAME}; then
+    docker rm ${env.CONTAINER_NAME}
+    echo "[INFO] Removed old container: ${env.CONTAINER_NAME}"
+fi
+
+# Start new production container  
 echo "[INFO] Starting new production container..."
 docker run -d \\
     -p ${env.DEPLOY_PORT}:8080 \\
-    --name aspnetapp-prod \\
+    --name ${env.CONTAINER_NAME} \\
     --restart unless-stopped \\
     -e ASPNETCORE_ENVIRONMENT=Production \\
+    -e ASPNETCORE_URLS=http://+:8080 \\
     ${IMAGE_NAME}:${env.IMAGE_TAG}
 
-echo "[INFO] Waiting for container to be ready..."
-sleep 15
+# Extended health check for production
+echo "[INFO] Performing production health check..."
+sleep 20
 
-if docker ps -f name=aspnetapp-prod --format "table {{.Names}}\\t{{.Status}}" | grep -q "Up"; then
-    echo "[SUCCESS] [\$(date)] Production deployment complete!"
-    echo "[INFO] Application running on http://\$(hostname -I | awk '{print \$1}'):${env.DEPLOY_PORT}"
+# Kiểm tra container status
+if docker ps -f name=${env.CONTAINER_NAME} --format "table {{.Names}}\\t{{.Status}}" | grep -q "Up"; then
+    CONTAINER_IP=\$(hostname -I | awk '{print \$1}')
+    echo ""
+    echo "=================================================="
+    echo "✅ PRODUCTION DEPLOYMENT SUCCESSFUL!"
+    echo "Time: \$(date)"
+    echo "Application URL: http://\$CONTAINER_IP:${env.DEPLOY_PORT}"
+    echo "Container Status: \$(docker ps -f name=${env.CONTAINER_NAME} --format '{{.Status}}')"
+    echo "Approved by: ${env.APPROVER_NAME}"
+    echo "=================================================="
+    
+    # Log deployment event
+    echo "\$(date): Production deployment completed - Image: ${IMAGE_NAME}:${env.IMAGE_TAG} - Approved by: ${env.APPROVER_NAME}" >> ${DEPLOY_DIR}/deployment.log
 else
-    echo "[ERROR] Production container failed to start"
-
-    docker logs aspnetapp-prod
+    echo ""
+    echo "=================================================="
+    echo "❌ PRODUCTION DEPLOYMENT FAILED"
+    echo "Container logs:"
+    docker logs ${env.CONTAINER_NAME}
+    echo "=================================================="
     exit 1
 fi
 EOF
@@ -373,54 +505,87 @@ EOF
     post {
         always {
             script {
-                echo "=== PIPELINE SUMMARY ==="
+                echo "=================================================="
+                echo "📋 PIPELINE EXECUTION SUMMARY"
+                echo "=================================================="
                 echo "Build Type: ${env.BUILD_TYPE}"
                 echo "Source Branch: ${env.SOURCE_BRANCH}"
                 echo "Target Branch: ${env.TARGET_BRANCH}"
                 echo "Image Tag: ${env.IMAGE_TAG}"
-                echo "Deployment: ${env.DEPLOYMENT_ENV}"
-                echo "Result: ${currentBuild.result ?: 'SUCCESS'}"
+                echo "Deployment Environment: ${env.DEPLOYMENT_ENV}"
+                echo "Build Result: ${currentBuild.result ?: 'SUCCESS'}"
+                echo "Build Duration: ${currentBuild.durationString}"
+                echo "Build URL: ${env.BUILD_URL}"
                 
-                if (env.BUILD_TYPE == 'PR') {
-                    echo "Pull Request #${env.CHANGE_ID} build completed"
+                if (env.BUILD_TYPE == 'PULL_REQUEST') {
+                    echo "Pull Request: #${env.CHANGE_ID} by ${env.CHANGE_AUTHOR}"
+                    echo "PR Title: ${env.CHANGE_TITLE}"
                 }
+                
+                if (env.APPROVER_NAME) {
+                    echo "Production Approved by: ${env.APPROVER_NAME}"
+                }
+                echo "=================================================="
             }
         }
         
         success {
             script {
+                def message = "✅ Pipeline completed successfully!"
+                
                 if (env.SHOULD_DEPLOY == 'true') {
-                    if (env.TARGET_BRANCH == 'develop') {
-                        echo "✅ Development deployment successful!"
-                    } else if (env.TARGET_BRANCH == 'main') {
-                        echo "✅ Production deployment successful!"
+                    if (env.DEPLOYMENT_ENV == 'development') {
+                        message = "✅ Development deployment completed successfully!"
+                    } else if (env.DEPLOYMENT_ENV == 'production') {
+                        message = "✅ Production deployment completed successfully!"
                     }
-                } else {
-                    echo "✅ Build completed successfully (no deployment)"
                 }
+                
+                echo message
+                
+                // Có thể thêm Slack/Teams notification ở đây
+                // slackSend(message: message)
             }
         }
         
         failure {
             script {
                 def message = "❌ Pipeline failed"
-                if (env.BUILD_TYPE == 'PR') {
+                
+                if (env.BUILD_TYPE == 'PULL_REQUEST') {
                     message += " for PR #${env.CHANGE_ID}"
                 } else {
                     message += " for branch ${env.BRANCH_NAME}"
                 }
+                
+                if (env.DEPLOYMENT_ENV && env.DEPLOYMENT_ENV != 'none') {
+                    message += " during ${env.DEPLOYMENT_ENV} deployment"
+                }
+                
                 echo message
+                
+                // Có thể thêm notification ở đây
+            }
+        }
+        
+        aborted {
+            script {
+                if (currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')) {
+                    echo "⏹️ Pipeline was manually aborted by user"
+                } else {
+                    echo "⏹️ Pipeline was aborted (likely feature branch skip)"
+                }
             }
         }
         
         cleanup {
             script {
-                // Cleanup trên build agents
+                // Cleanup trên build nodes
                 try {
                     node('agent-builder') {
                         sh """
                         # Remove test containers
-                        docker rm -f temp-test aspnetapp-test 2>/dev/null || true
+                        docker rm -f smoke-test-${env.BUILD_NUMBER} aspnetapp-test 2>/dev/null || true
                         
                         # Remove test images
                         docker rmi aspnetapp-test 2>/dev/null || true
@@ -429,14 +594,15 @@ EOF
                         docker images ${IMAGE_NAME} --format "table {{.Repository}}:{{.Tag}}\\t{{.CreatedAt}}" | \\
                         tail -n +11 | awk '{print \$1}' | xargs -r docker rmi 2>/dev/null || true
                         
-                        # Prune unused images
+                        # Prune unused images và containers
+                        docker container prune -f || true
                         docker image prune -f || true
                         
-                        echo "Cleanup completed"
+                        echo "✅ Cleanup completed"
                         """
                     }
                 } catch (Exception e) {
-                    echo "Cleanup warning: ${e.getMessage()}"
+                    echo "⚠️ Cleanup warning: ${e.getMessage()}"
                 }
             }
         }
