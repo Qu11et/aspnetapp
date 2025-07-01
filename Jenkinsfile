@@ -7,8 +7,8 @@ pipeline {
         DEPLOY_DIR = "/home/TaiKhau/app"
 
         // IP của GCP VMs
-        GCP_VM_DEV = '34.126.143.226'
-        GCP_VM_PROD = '34.143.235.29'
+        GCP_VM_DEV = '34.142.138.182'
+        GCP_VM_PROD = '34.142.133.202'
 
         // Docker Hub
         DOCKER_HUB_CREDS = credentials('dockerhub-credentials')
@@ -19,22 +19,28 @@ pipeline {
         GITHUB_TOKEN = credentials('github-token')
     }
 
-    triggers {
-        githubPush()
-    }
-
     stages {
         stage('Checkout') {
             agent { label 'agent-builder' }
             steps {
-                // Lấy nhánh hiện tại demo 1
+                // Lấy nhánh hiện tại
                 script {
-                    env.CURRENT_BRANCH = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'dev'
+                    // Xác định nếu đây là một Pull Request
+                    env.IS_PR = env.CHANGE_ID ? true : false
+                    
+                    if (env.IS_PR) {
+                        // Pull Request
+                        env.CURRENT_BRANCH = env.CHANGE_BRANCH
+                        echo "Processing Pull Request #${env.CHANGE_ID} from branch: ${env.CURRENT_BRANCH} to ${env.CHANGE_TARGET}"
+                    } else {
+                        // Branch thông thường
+                        env.CURRENT_BRANCH = env.BRANCH_NAME
+                        echo "Processing branch: ${env.CURRENT_BRANCH}"
+                    }
                 }
 
-                // Clone với token an toàn
-                git branch: "${env.CURRENT_BRANCH}", url: "https://Qu11et:${GITHUB_TOKEN}@github.com/Qu11et/aspnetapp.git"
-
+                checkout scm
+                
                 sh 'ls -la'
                 sh 'pwd'
             }
@@ -44,7 +50,6 @@ pipeline {
             agent { label 'agent-builder' }
             steps {
                 script {
-                    //def arch = ''
                     sh """
                     docker build --pull -t ${IMAGE_NAME}:${env.BUILD_NUMBER} .
                     """
@@ -80,7 +85,10 @@ pipeline {
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'dev'
+                anyOf {
+                    branch 'dev'
+                    expression { return env.CHANGE_TARGET == 'dev' }
+                }
             }
             steps {
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
@@ -115,7 +123,10 @@ EOF
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                branch 'main'
+                anyOf {
+                    branch 'main'
+                    expression { return env.CHANGE_TARGET == 'main' }
+                }
             }
             steps {
                 input message: "Bạn có chắc muốn deploy lên môi trường Production?"
@@ -143,6 +154,18 @@ EOF
                     }
                 }
             }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Build completed'
+        }
+        success {
+            echo "Build successful!"
+        }
+        failure {
+            echo "Build failed!"
         }
     }
 }
