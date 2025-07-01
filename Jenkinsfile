@@ -17,16 +17,12 @@ pipeline {
 
         // GitHub Token
         GITHUB_TOKEN = credentials('github-token')
-
+        
         // Tên repo để gửi trạng thái build
-        REPO_NAME = 'Qu11et/aspnetapp'
+        REPO_OWNER = 'Qu11et'  // Thay bằng owner repository của bạn
+        REPO_NAME = 'aspnetapp' // Thay bằng tên repository của bạn
     }
-
-    options {
-        // option để gửi trạng thái build về GitHub
-        githubSetCommitStatus(context: 'Jenkins Pipeline')
-    }
-
+    
     stages {
         stage('Checkout') {
             agent { label 'agent-builder' }
@@ -40,17 +36,16 @@ pipeline {
                         // Pull Request
                         env.CURRENT_BRANCH = env.CHANGE_BRANCH
                         echo "Processing Pull Request #${env.CHANGE_ID} from branch: ${env.CURRENT_BRANCH} to ${env.CHANGE_TARGET}"
-
-                        // Cập nhật trạng thái GitHub - Đang chạy
-                        githubNotify(
-                            credentialsId: 'github-token',
-                            account: 'Qu11et',
-                            repo: "${REPO_NAME.split('/')[1]}",
-                            sha: "${GIT_COMMIT}",
-                            context: 'Jenkins Pipeline',
-                            description: 'Build is running',
-                            status: 'PENDING'
-                        )
+                        
+                        // Đánh dấu trạng thái bắt đầu build
+                        step([
+                            $class: 'GitHubCommitStatusSetter',
+                            reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
+                            contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
+                            statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
+                                [$class: 'AnyBuildResult', message: 'Building', state: 'PENDING']
+                            ]]
+                        ])
                     } else {
                         // Branch thông thường
                         env.CURRENT_BRANCH = env.BRANCH_NAME
@@ -177,38 +172,33 @@ EOF
     }
     
     post {
-        always {
-            echo 'Build completed'
-        }
         success {
             script {
-                if (env.IS_PR == 'true') {
+                if (env.CHANGE_ID) {
                     // Cập nhật trạng thái GitHub - Thành công
-                    githubNotify(
-                        credentialsId: 'github-token',
-                        account: 'Qu11et',
-                        repo: "${REPO_NAME.split('/')[1]}",
-                        sha: "${GIT_COMMIT}",
-                        context: 'Jenkins Pipeline',
-                        description: 'Build succeeded',
-                        status: 'SUCCESS'
-                    )
+                    step([
+                        $class: 'GitHubCommitStatusSetter',
+                        reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
+                        contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
+                        statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
+                            [$class: 'AnyBuildResult', message: 'Build succeeded', state: 'SUCCESS']
+                        ]]
+                    ])
                 }
             }
         }
         failure {
             script {
-                if (env.IS_PR == 'true') {
+                if (env.CHANGE_ID) {
                     // Cập nhật trạng thái GitHub - Thất bại
-                    githubNotify(
-                        credentialsId: 'github-token',
-                        account: 'Qu11et',
-                        repo: "${REPO_NAME.split('/')[1]}",
-                        sha: "${GIT_COMMIT}",
-                        context: 'Jenkins Pipeline',
-                        description: 'Build failed',
-                        status: 'FAILURE'
-                    )
+                    step([
+                        $class: 'GitHubCommitStatusSetter',
+                        reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
+                        contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
+                        statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
+                            [$class: 'AnyBuildResult', message: 'Build failed', state: 'FAILURE']
+                        ]]
+                    ])
                 }
             }
         }
