@@ -8,7 +8,7 @@ WORKDIR /source
 COPY --link aspnetapp/*.csproj .
 RUN dotnet restore -a $TARGETARCH
 
-# Copy source code and publish app/////////
+# Copy source code and publish app/////////testpr
 COPY --link aspnetapp/. .
 RUN dotnet publish -a $TARGETARCH --no-restore -o /app
 
