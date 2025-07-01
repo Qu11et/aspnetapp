@@ -17,6 +17,14 @@ pipeline {
 
         // GitHub Token
         GITHUB_TOKEN = credentials('github-token')
+
+        // Tên repo để gửi trạng thái build
+        REPO_NAME = 'Qu11et/aspnetapp'
+    }
+
+    options {
+        // option để gửi trạng thái build về GitHub
+        githubSetCommitStatus(context: 'Jenkins Pipeline')
     }
 
     stages {
@@ -32,6 +40,17 @@ pipeline {
                         // Pull Request
                         env.CURRENT_BRANCH = env.CHANGE_BRANCH
                         echo "Processing Pull Request #${env.CHANGE_ID} from branch: ${env.CURRENT_BRANCH} to ${env.CHANGE_TARGET}"
+
+                        // Cập nhật trạng thái GitHub - Đang chạy
+                        githubNotify(
+                            credentialsId: 'github-token',
+                            account: 'Qu11et',
+                            repo: "${REPO_NAME.split('/')[1]}",
+                            sha: "${GIT_COMMIT}",
+                            context: 'Jenkins Pipeline',
+                            description: 'Build is running',
+                            status: 'PENDING'
+                        )
                     } else {
                         // Branch thông thường
                         env.CURRENT_BRANCH = env.BRANCH_NAME
@@ -162,10 +181,36 @@ EOF
             echo 'Build completed'
         }
         success {
-            echo "Build successful!"
+            script {
+                if (env.IS_PR == 'true') {
+                    // Cập nhật trạng thái GitHub - Thành công
+                    githubNotify(
+                        credentialsId: 'github-token',
+                        account: 'Qu11et',
+                        repo: "${REPO_NAME.split('/')[1]}",
+                        sha: "${GIT_COMMIT}",
+                        context: 'Jenkins Pipeline',
+                        description: 'Build succeeded',
+                        status: 'SUCCESS'
+                    )
+                }
+            }
         }
         failure {
-            echo "Build failed!"
+            script {
+                if (env.IS_PR == 'true') {
+                    // Cập nhật trạng thái GitHub - Thất bại
+                    githubNotify(
+                        credentialsId: 'github-token',
+                        account: 'Qu11et',
+                        repo: "${REPO_NAME.split('/')[1]}",
+                        sha: "${GIT_COMMIT}",
+                        context: 'Jenkins Pipeline',
+                        description: 'Build failed',
+                        status: 'FAILURE'
+                    )
+                }
+            }
         }
     }
 }
