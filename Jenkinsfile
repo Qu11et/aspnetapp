@@ -300,7 +300,7 @@ mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
 
 # Pull image
 echo "[INFO] Pulling Docker image..."
-docker pull ${IMAGE_NAME}:${env.IMAGE_TAG}
+docker pull "${IMAGE_NAME}:${env.IMAGE_TAG}"
 
 # Stop và remove container cũ
 echo "[INFO] Stopping existing container..."
@@ -447,7 +447,7 @@ fi
 
 # Pull new image
 echo "[INFO] Pulling new Docker image..."
-docker pull ${IMAGE_NAME}:${env.IMAGE_TAG}
+docker pull "${IMAGE_NAME}:${env.IMAGE_TAG}"
 
 # Stop current container
 echo "[INFO] Stopping current production container..."
