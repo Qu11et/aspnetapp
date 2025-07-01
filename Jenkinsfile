@@ -280,7 +280,6 @@ pipeline {
                         echo "Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
                         echo "Target VM: ${env.VM_IP}"
                         echo "Port: ${env.DEPLOY_PORT}"
-                        def fullTag = "${IMAGE_NAME}:${env.IMAGE_TAG}"
                         
                         sh """
                         ssh -i \$SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${SSH_USER}@${env.VM_IP} << 'EOF'
@@ -301,7 +300,7 @@ mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
 
 # Pull image
 echo "[INFO] Pulling Docker image..."
-docker pull ${fullTag}
+docker pull ${IMAGE_NAME}:${IMAGE_TAG}
 
 # Stop và remove container cũ
 echo "[INFO] Stopping existing container..."
@@ -329,7 +328,7 @@ docker run -d \\
     --restart unless-stopped \\
     -e ASPNETCORE_ENVIRONMENT=Development \\
     -e ASPNETCORE_URLS=http://+:8080 \\
-    ${IMAGE_NAME}:${env.IMAGE_TAG}
+    ${IMAGE_NAME}:${IMAGE_TAG}
 
 # Health check
 echo "[INFO] Performing health check..."
@@ -419,7 +418,6 @@ EOF
                     script {
                         echo "🚀 Deploying to Production Environment"
                         echo "Approved by: ${env.APPROVER_NAME}"
-                        def fullTag = "${IMAGE_NAME}:${env.IMAGE_TAG}"
                         
                         sh """
                         ssh -i \$SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${SSH_USER}@${env.VM_IP} << 'EOF'
@@ -449,7 +447,7 @@ fi
 
 # Pull new image
 echo "[INFO] Pulling new Docker image..."
-docker pull ${fullTag}
+docker pull ${IMAGE_NAME}:${IMAGE_TAG}
 
 # Stop current container
 echo "[INFO] Stopping current production container..."
@@ -472,7 +470,7 @@ docker run -d \\
     --restart unless-stopped \\
     -e ASPNETCORE_ENVIRONMENT=Production \\
     -e ASPNETCORE_URLS=http://+:8080 \\
-    ${IMAGE_NAME}:${env.IMAGE_TAG}
+    ${IMAGE_NAME}:${IMAGE_TAG}
 
 # Extended health check for production
 echo "[INFO] Performing production health check..."
