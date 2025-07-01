@@ -176,7 +176,7 @@ EOF
             node('agent-builder') { 
                 script {
                     if (env.CHANGE_ID) {
-                        // Cập nhật trạng thái GitHub - Thành công
+                        // Cập nhật trạng thái GitHub - Thành công!
                         step([
                             $class: 'GitHubCommitStatusSetter',
                             reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
@@ -193,7 +193,7 @@ EOF
             node('agent-builder') { 
                 script {
                     if (env.CHANGE_ID) {
-                        // Cập nhật trạng thái GitHub - Thất bại
+                        // Cập nhật trạng thái GitHub - Thất bại!
                         step([
                             $class: 'GitHubCommitStatusSetter',
                             reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
