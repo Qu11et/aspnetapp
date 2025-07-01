@@ -2,25 +2,19 @@ pipeline {
     agent none
 
     environment {
-        // Thông tin chung
+        // Thông tin chung (giữ nguyên)
         SSH_USER = 'TaiKhau'
         DEPLOY_DIR = "/home/TaiKhau/app"
-
-        // IP của GCP VMs
         GCP_VM_DEV = '34.142.138.182'
         GCP_VM_PROD = '34.142.133.202'
-
-        // Docker Hub
         DOCKER_HUB_CREDS = credentials('dockerhub-credentials')
         DOCKER_HUB_USERNAME = "${DOCKER_HUB_CREDS_USR}"
         IMAGE_NAME = "${DOCKER_HUB_USERNAME}/aspnetapp"
-
-        // GitHub Token
         GITHUB_TOKEN = credentials('github-token')
         
         // Tên repo để gửi trạng thái build
-        REPO_OWNER = 'Qu11et'  // Thay bằng owner repository của bạn
-        REPO_NAME = 'aspnetapp' // Thay bằng tên repository của bạn
+        REPO_OWNER = 'Qu11et'
+        REPO_NAME = 'aspnetapp'
     }
     
     stages {
@@ -37,29 +31,41 @@ pipeline {
                         env.CURRENT_BRANCH = env.CHANGE_BRANCH
                         echo "Processing Pull Request #${env.CHANGE_ID} from branch: ${env.CURRENT_BRANCH} to ${env.CHANGE_TARGET}"
                         
-                        // Đánh dấu trạng thái bắt đầu build
-                        step([
-                            $class: 'GitHubCommitStatusSetter',
-                            reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
-                            contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
-                            statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
-                                [$class: 'AnyBuildResult', message: 'Building', state: 'PENDING']
-                            ]]
-                        ])
+                        // Lưu commit SHA vào biến môi trường
+                        checkout scm
+                        env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                        echo "Commit SHA: ${env.GIT_COMMIT}"
+                        
+                        // Đánh dấu trạng thái bắt đầu build bằng GitHub Status API trực tiếp
+                        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_ACCESS_TOKEN')]) {
+                            sh """
+                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
+                                 -X POST \
+                                 -H "Accept: application/vnd.github.v3+json" \
+                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
+                                 -d '{
+                                   "state": "pending",
+                                   "context": "Jenkins Pipeline",
+                                   "description": "Build is running",
+                                   "target_url": "${env.BUILD_URL}"
+                                 }'
+                            """
+                        }
                     } else {
                         // Branch thông thường
                         env.CURRENT_BRANCH = env.BRANCH_NAME
                         echo "Processing branch: ${env.CURRENT_BRANCH}"
+                        checkout scm
+                        env.GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     }
                 }
-
-                checkout scm
                 
                 sh 'ls -la'
                 sh 'pwd'
             }
         }
 
+        // Các stages khác (Build, Test, Push, Deploy) giữ nguyên
         stage('Build') {
             agent { label 'agent-builder' }
             steps {
@@ -105,6 +111,7 @@ pipeline {
                 }
             }
             steps {
+                // Giữ nguyên các bước triển khai Dev
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
@@ -143,6 +150,7 @@ EOF
                 }
             }
             steps {
+                // Giữ nguyên các bước triển khai Prod
                 input message: "Bạn có chắc muốn deploy lên môi trường Production?"
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
@@ -173,35 +181,47 @@ EOF
     
     post {
         success {
-            node('agent-builder') { 
+            node('agent-builder') {
                 script {
-                    if (env.CHANGE_ID) {
-                        // Cập nhật trạng thái GitHub - Thành công!
-                        step([
-                            $class: 'GitHubCommitStatusSetter',
-                            reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
-                            contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
-                            statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
-                                [$class: 'AnyBuildResult', message: 'Build succeeded', state: 'SUCCESS']
-                            ]]
-                        ])
+                    if (env.IS_PR == 'true' && env.GIT_COMMIT) {
+                        // Cập nhật trạng thái thành công trực tiếp qua GitHub Status API
+                        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_ACCESS_TOKEN')]) {
+                            sh """
+                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
+                                 -X POST \
+                                 -H "Accept: application/vnd.github.v3+json" \
+                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
+                                 -d '{
+                                   "state": "success",
+                                   "context": "Jenkins Pipeline",
+                                   "description": "Build succeeded",
+                                   "target_url": "${env.BUILD_URL}"
+                                 }'
+                            """
+                        }
                     }
                 }
             }
         }
         failure {
-            node('agent-builder') { 
+            node('agent-builder') {
                 script {
-                    if (env.CHANGE_ID) {
-                        // Cập nhật trạng thái GitHub - Thất bại!
-                        step([
-                            $class: 'GitHubCommitStatusSetter',
-                            reposSource: [$class: 'ManuallyEnteredRepositorySource', url: "https://github.com/${REPO_OWNER}/${REPO_NAME}"],
-                            contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: 'Jenkins Pipeline'],
-                            statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
-                                [$class: 'AnyBuildResult', message: 'Build failed', state: 'FAILURE']
-                            ]]
-                        ])
+                    if (env.IS_PR == 'true' && env.GIT_COMMIT) {
+                        // Cập nhật trạng thái thất bại trực tiếp qua GitHub Status API
+                        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_ACCESS_TOKEN')]) {
+                            sh """
+                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
+                                 -X POST \
+                                 -H "Accept: application/vnd.github.v3+json" \
+                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
+                                 -d '{
+                                   "state": "failure",
+                                   "context": "Jenkins Pipeline",
+                                   "description": "Build failed",
+                                   "target_url": "${env.BUILD_URL}"
+                                 }'
+                            """
+                        }
                     }
                 }
             }
