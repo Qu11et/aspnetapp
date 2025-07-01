@@ -23,7 +23,7 @@ pipeline {
         GITHUB_TOKEN = credentials('github-token')
     }
 
-     stages {
+    stages {
         stage('Initialize & Validate') {
             agent { label 'agent-builder' }
             steps {
@@ -77,63 +77,65 @@ pipeline {
                             env.AGENT_LABEL = 'agent2'
                         } else {
                             error "Pull Requests are only allowed to target 'dev' or 'main' branches. Current target: ${env.TARGET_BRANCH}"
-                        } else {
-                            // ========== DIRECT PUSH CONTEXT ==========
-                            env.SOURCE_BRANCH = env.BRANCH_NAME
-                            env.TARGET_BRANCH = env.BRANCH_NAME
-                            
-                            echo "Direct Push Details:"
-                            echo "  Branch: ${env.BRANCH_NAME}"
-                            
-                            if (env.BRANCH_NAME == 'dev') {
-                                env.BUILD_TYPE = 'DIRECT_PUSH_DEV'
-                                env.DEPLOYMENT_ENV = 'development'
-                                env.DEPLOY_PORT = env.DEV_PORT
-                                env.SHOULD_DEPLOY = 'true'
-                                env.VM_IP = env.GCP_VM_DEV
-                                env.CONTAINER_NAME = 'aspnetapp-dev'
-                                env.AGENT_LABEL = 'agent1'
-                            } else if (env.BRANCH_NAME == 'main') {
-                                // Chặn direct push vào main
-                                error "Direct push to 'main' branch is not allowed. Please create a Pull Request."
-                            } else if (env.BRANCH_NAME?.startsWith('feature/') || env.BRANCH_NAME?.startsWith('hotfix/') || env.BRANCH_NAME?.startsWith('bugfix/')) {
-                                // Feature branches - Skip pipeline
-                                echo "Feature/Hotfix/Bugfix branch detected: ${env.BRANCH_NAME}"
-                                echo "Skipping pipeline execution as per configuration."
-                                currentBuild.result = 'ABORTED'
-                                error "Pipeline skipped for feature branch: ${env.BRANCH_NAME}"
-                            } else {
-                                // Other branches - không deploy
-                                env.BUILD_TYPE = 'BRANCH_BUILD'
-                                env.DEPLOYMENT_ENV = 'none'
-                                env.SHOULD_DEPLOY = 'false'
-                                echo "Branch '${env.BRANCH_NAME}' will be built but not deployed."
-                            }
                         }
-                        // Tạo image tag
-                        if (env.BUILD_TYPE == 'PULL_REQUEST') {
-                            env.IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
-                        } else {
-                            env.IMAGE_TAG = "${env.BRANCH_NAME.replaceAll('/', '-')}-${env.BUILD_NUMBER}"
-                        }
+                    }
+
+                    else {
+                        // ========== DIRECT PUSH CONTEXT ==========
+                        env.SOURCE_BRANCH = env.BRANCH_NAME
+                        env.TARGET_BRANCH = env.BRANCH_NAME
                         
-                        // Summary
-                        echo "=== PIPELINE CONFIGURATION ==="
-                        echo "Build Type: ${env.BUILD_TYPE}"
-                        echo "Source Branch: ${env.SOURCE_BRANCH}"
-                        echo "Target Branch: ${env.TARGET_BRANCH}"
-                        echo "Deployment Environment: ${env.DEPLOYMENT_ENV}"
-                        echo "Should Deploy: ${env.SHOULD_DEPLOY}"
-                        echo "Deploy Port: ${env.DEPLOY_PORT ?: 'N/A'}"
-                        echo "VM IP: ${env.VM_IP ?: 'N/A'}"
-                        echo "Container Name: ${env.CONTAINER_NAME ?: 'N/A'}"
-                        echo "Image Tag: ${env.IMAGE_TAG}"
-                    } 
-                }
+                        echo "Direct Push Details:"
+                        echo "  Branch: ${env.BRANCH_NAME}"
+                        
+                        if (env.BRANCH_NAME == 'dev') {
+                            env.BUILD_TYPE = 'DIRECT_PUSH_DEV'
+                            env.DEPLOYMENT_ENV = 'development'
+                            env.DEPLOY_PORT = env.DEV_PORT
+                            env.SHOULD_DEPLOY = 'true'
+                            env.VM_IP = env.GCP_VM_DEV
+                            env.CONTAINER_NAME = 'aspnetapp-dev'
+                            env.AGENT_LABEL = 'agent1'
+                        } else if (env.BRANCH_NAME == 'main') {
+                            // Chặn direct push vào main
+                            error "Direct push to 'main' branch is not allowed. Please create a Pull Request."
+                        } else if (env.BRANCH_NAME?.startsWith('feature/') || env.BRANCH_NAME?.startsWith('hotfix/') || env.BRANCH_NAME?.startsWith('bugfix/')) {
+                            // Feature branches - Skip pipeline
+                            echo "Feature/Hotfix/Bugfix branch detected: ${env.BRANCH_NAME}"
+                            echo "Skipping pipeline execution as per configuration."
+                            currentBuild.result = 'ABORTED'
+                            error "Pipeline skipped for feature branch: ${env.BRANCH_NAME}"
+                        } else {
+                            // Other branches - không deploy
+                            env.BUILD_TYPE = 'BRANCH_BUILD'
+                            env.DEPLOYMENT_ENV = 'none'
+                            env.SHOULD_DEPLOY = 'false'
+                            echo "Branch '${env.BRANCH_NAME}' will be built but not deployed."
+                        }
+                    }
+                    // Tạo image tag
+                    if (env.BUILD_TYPE == 'PULL_REQUEST') {
+                        env.IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
+                    } else {
+                        env.IMAGE_TAG = "${env.BRANCH_NAME.replaceAll('/', '-')}-${env.BUILD_NUMBER}"
+                    }
+                    
+                    // Summary
+                    echo "=== PIPELINE CONFIGURATION ==="
+                    echo "Build Type: ${env.BUILD_TYPE}"
+                    echo "Source Branch: ${env.SOURCE_BRANCH}"
+                    echo "Target Branch: ${env.TARGET_BRANCH}"
+                    echo "Deployment Environment: ${env.DEPLOYMENT_ENV}"
+                    echo "Should Deploy: ${env.SHOULD_DEPLOY}"
+                    echo "Deploy Port: ${env.DEPLOY_PORT ?: 'N/A'}"
+                    echo "VM IP: ${env.VM_IP ?: 'N/A'}"
+                    echo "Container Name: ${env.CONTAINER_NAME ?: 'N/A'}"
+                    echo "Image Tag: ${env.IMAGE_TAG}"
+                } 
             }
         }
 
-    stage('Checkout') {
+        stage('Checkout') {
             agent { label 'agent-builder' }
             steps {
                 script {
@@ -558,5 +560,6 @@ EOF
                 }
             }
         }
-    }
+    }    
 }
+
