@@ -16,6 +16,33 @@ pipeline {
         REPO_OWNER = 'Qu11et'
         REPO_NAME = 'aspnetapp'
     }
+
+    stage('Validate Branch Name Convention') {
+        when {
+            expression { env.CHANGE_ID != null } // Chỉ kiểm tra khi là Pull Request
+        }
+        steps {
+            script {
+            def branchName = env.CHANGE_BRANCH
+            echo "🔍 Checking branch name: ${branchName}"
+
+            // Quy tắc:
+            // - Bắt đầu với: feature/, bugfix/, hotfix/, refactor/
+            // - Sau đó là chuỗi lowercase chữ số và dấu -
+            // - Không có -- hoặc kết thúc bằng -
+            def regex = ~/^(feature|bugfix|hotfix|refactor)\/(issue-\d+-)?[a-z0-9]+(-[a-z0-9]+)*$/
+
+            if (!(branchName ==~ regex) && !(branchName in ['main', 'dev'])) {
+                echo "👉 Quy tắc: 'feature/issue-123-new-login' (lowercase, số, dấu -, không kết thúc bằng -)"
+                error "❌ Branch name '${branchName}' không hợp lệ theo convention!"
+                // Không dừng pipeline, chỉ cảnh báo
+            } else {
+                echo "✅ Branch name is valid!"
+            }
+            }
+        }
+    }
+
     
     stages {
         stage('Checkout') {
@@ -65,7 +92,6 @@ pipeline {
             }
         }
 
-        // Các stages khác (Build, Test, Push, Deploy) giữ nguyên
         stage('Build') {
             agent { label 'agent-builder' }
             steps {
