@@ -39,45 +39,27 @@ pipeline {
                     echo "BUILD_NUMBER: ${env.BUILD_NUMBER}"
                     echo "JOB_NAME: ${env.JOB_NAME}"
                     
-                    // Xác định context: PR hoặc branch thông thường
+                    // Với "Only branches that are also filed as PRs", tất cả builds đều là PR context
                     def isPullRequest = env.CHANGE_ID != null
-                    def isFeatureBranch = env.BRANCH_NAME?.startsWith('feature/')
-                    def isDevelopBranch = env.BRANCH_NAME == 'develop'
-                    def isMainBranch = env.BRANCH_NAME == 'main'
                     
                     echo "=== BUILD CONTEXT ==="
                     echo "Is Pull Request: ${isPullRequest}"
-                    echo "Is Feature Branch: ${isFeatureBranch}"
-                    echo "Is Develop Branch: ${isDevelopBranch}"
-                    echo "Is Main Branch: ${isMainBranch}"
                     
-                    // Xác định target branch và deployment environment
-                    if (isPullRequest) {
-                        // Đây là Pull Request
-                        env.TARGET_BRANCH = env.CHANGE_TARGET
-                        env.SOURCE_BRANCH = env.CHANGE_BRANCH
-                        env.BUILD_TYPE = 'PR'
-                        
-                        echo "Processing Pull Request #${env.CHANGE_ID}"
-                        echo "Source: ${env.SOURCE_BRANCH} → Target: ${env.TARGET_BRANCH}"
-                        
-                    } else if (isDevelopBranch) {
-                        // Push trực tiếp đến develop
-                        env.TARGET_BRANCH = 'develop'
-                        env.SOURCE_BRANCH = 'develop'
-                        env.BUILD_TYPE = 'DIRECT_PUSH'
-                        
-                    } else if (isMainBranch) {
-                        // Push trực tiếp đến main
-                        env.TARGET_BRANCH = 'main'
-                        env.SOURCE_BRANCH = 'main'
-                        env.BUILD_TYPE = 'DIRECT_PUSH'
-                        
-                    } else {
-                        // Feature branch - chỉ build, không deploy
-                        env.TARGET_BRANCH = 'none'
-                        env.SOURCE_BRANCH = env.BRANCH_NAME
-                        env.BUILD_TYPE = 'FEATURE_BUILD'
+                    if (!isPullRequest) {
+                        error "This pipeline is configured to run only on Pull Requests. Current build is not a PR context."
+                    }
+                    
+                    // Xác định target branch và deployment environment  
+                    env.TARGET_BRANCH = env.CHANGE_TARGET
+                    env.SOURCE_BRANCH = env.CHANGE_BRANCH
+                    env.BUILD_TYPE = 'PR'
+                    
+                    echo "Processing Pull Request #${env.CHANGE_ID}"
+                    echo "Source: ${env.SOURCE_BRANCH} → Target: ${env.TARGET_BRANCH}"
+                    
+                    // Validate target branch
+                    if (!(env.TARGET_BRANCH in ['develop', 'main'])) {
+                        error "Pull requests are only allowed to target 'develop' or 'main' branches. Current target: ${env.TARGET_BRANCH}"
                     }
                     
                     // Set deployment parameters
