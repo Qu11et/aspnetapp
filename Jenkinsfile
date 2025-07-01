@@ -299,6 +299,7 @@ EOF
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         echo "Deploying to Production environment..."
+
                         echo "Image: ${IMAGE_NAME}:${env.IMAGE_TAG}"
                         
                         sh """
@@ -339,6 +340,7 @@ if docker ps -f name=aspnetapp-prod --format "table {{.Names}}\\t{{.Status}}" | 
     echo "[INFO] Application running on http://\$(hostname -I | awk '{print \$1}'):${env.DEPLOY_PORT}"
 else
     echo "[ERROR] Production container failed to start"
+
     docker logs aspnetapp-prod
     exit 1
 fi
