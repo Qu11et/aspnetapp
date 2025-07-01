@@ -61,7 +61,7 @@ pipeline {
                         echo "  Title: ${env.CHANGE_TITLE}"
                         
                         // Validate PR target branch
-                        if (env.TARGET_BRANCH == 'develop') {
+                        if (env.TARGET_BRANCH == 'dev') {
                             env.DEPLOYMENT_ENV = 'development'
                             env.DEPLOY_PORT = env.DEV_PORT
                             env.SHOULD_DEPLOY = 'true'
@@ -76,7 +76,7 @@ pipeline {
                             env.CONTAINER_NAME = 'aspnetapp-prod'
                             env.AGENT_LABEL = 'agent2'
                         } else {
-                            error "Pull Requests are only allowed to target 'develop' or 'main' branches. Current target: ${env.TARGET_BRANCH}"
+                            error "Pull Requests are only allowed to target 'dev' or 'main' branches. Current target: ${env.TARGET_BRANCH}"
                         }
                         
                     } else {
@@ -87,7 +87,7 @@ pipeline {
                         echo "Direct Push Details:"
                         echo "  Branch: ${env.BRANCH_NAME}"
                         
-                        if (env.BRANCH_NAME == 'develop') {
+                        if (env.BRANCH_NAME == 'dev') {
                             env.BUILD_TYPE = 'DIRECT_PUSH_DEV'
                             env.DEPLOYMENT_ENV = 'development'
                             env.DEPLOY_PORT = env.DEV_PORT
@@ -236,7 +236,7 @@ pipeline {
                 // Chỉ push khi cần deploy hoặc là main branches
                 anyOf {
                     expression { env.SHOULD_DEPLOY == 'true' }
-                    expression { env.BRANCH_NAME in ['develop', 'main'] }
+                    expression { env.BRANCH_NAME in ['dev', 'main'] }
                 }
             }
             steps {
