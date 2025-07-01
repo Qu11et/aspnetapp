@@ -77,9 +77,7 @@ pipeline {
                             env.AGENT_LABEL = 'agent2'
                         } else {
                             error "Pull Requests are only allowed to target 'dev' or 'main' branches. Current target: ${env.TARGET_BRANCH}"
-                        }
-                        
-                        else {
+                        } else {
                             // ========== DIRECT PUSH CONTEXT ==========
                             env.SOURCE_BRANCH = env.BRANCH_NAME
                             env.TARGET_BRANCH = env.BRANCH_NAME
