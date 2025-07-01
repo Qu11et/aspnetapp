@@ -304,15 +304,20 @@ docker pull ${IMAGE_NAME}:${env.IMAGE_TAG}
 
 # Stop và remove container cũ
 echo "[INFO] Stopping existing container..."
-if docker ps -q -f name=${env.CONTAINER_NAME}; then
+if [ "$(docker ps -q -f name=${env.CONTAINER_NAME})" ]; then
     docker stop ${env.CONTAINER_NAME}
     echo "[INFO] Stopped existing container: ${env.CONTAINER_NAME}"
+else
+    echo "[INFO] No running container named ${env.CONTAINER_NAME} found"
 fi
 
+
 echo "[INFO] Removing old container..."
-if docker ps -aq -f name=${env.CONTAINER_NAME}; then
+if [ "$(docker ps -aq -f name=${env.CONTAINER_NAME})" ]; then
     docker rm ${env.CONTAINER_NAME}
     echo "[INFO] Removed old container: ${env.CONTAINER_NAME}"
+else
+    echo "[INFO] No container named ${env.CONTAINER_NAME} to remove"
 fi
 
 # Start container mới
