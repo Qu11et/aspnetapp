@@ -173,9 +173,6 @@ pipeline {
         }
 
         stage('Deploy to Dev') {
-            when {
-                expression { env.DEPLOY_ENV == 'dev' }
-            }
             agent { label 'agent-manual' }
             environment {
                 // Đặt các biến môi trường cần thiết cho Dev
@@ -188,6 +185,7 @@ pipeline {
             }
             when {
                 anyOf {
+                    expression { env.DEPLOY_ENV == 'dev' }
                     branch 'dev'
                     expression { return env.CHANGE_TARGET == 'dev' }
                 }
@@ -248,9 +246,6 @@ EOF
         }
 
         stage('Deploy to Prod') {
-            when {
-                expression { env.DEPLOY_ENV == 'prod' }
-            }
             agent { label 'agent2' }
             environment {
                 // Đặt các biến môi trường cần thiết cho Production
@@ -263,6 +258,7 @@ EOF
             }
             when {
                 anyOf {
+                    expression { env.DEPLOY_ENV == 'prod' }
                     branch 'main'
                     expression { return env.CHANGE_TARGET == 'main' }
                 }
