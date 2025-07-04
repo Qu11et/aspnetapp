@@ -21,32 +21,6 @@ pipeline {
     }
 
     stages {
-        stage('Validate Branch Name Convention') {
-            when {
-                expression { env.CHANGE_ID != null } // Chỉ kiểm tra khi là Pull Request
-            }
-            steps {
-                script {
-                def branchName = env.CHANGE_BRANCH
-                echo "🔍 Checking branch name: ${branchName}"
-
-                // Quy tắc:
-                // - Bắt đầu với: feature/, bugfix/, hotfix/, refactor/
-                // - Sau đó là chuỗi lowercase chữ số và dấu -
-                // - Không có -- hoặc kết thúc bằng -
-                def regex = ~/^(feature|bugfix|hotfix|refactor)\/(issue-\d+-)?[a-z0-9]+(-[a-z0-9]+)*$/
-
-                if (!(branchName ==~ regex) && !(branchName in ['main', 'dev'])) {
-                    echo "👉 Quy tắc: 'feature/issue-123-new-login' (lowercase, số, dấu -, không kết thúc bằng -)"
-                    error "❌ Branch name '${branchName}' không hợp lệ theo convention!"
-                    // Không dừng pipeline, chỉ cảnh báo
-                } else {
-                    echo "✅ Branch name is valid!"
-                }
-                }
-            }
-        }
-
         stage('Checkout') {
             agent { label 'agent-builder' }
             steps {
@@ -155,65 +129,44 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Select Environment') {
             agent { label 'agent-builder' }
             steps {
                 script {
-                    // Build Docker image với multiple tags
-                    sh """
-                    docker build --pull -t ${IMAGE_NAME}:${IMAGE_TAG_LATEST} \\
-                                      -t ${IMAGE_NAME}:${IMAGE_TAG_VERSION} \\
-                                      -t ${IMAGE_NAME}:${IMAGE_TAG_COMMIT} \\
-                                      -t ${IMAGE_NAME}:${IMAGE_TAG_BRANCH} \\
-                                      -t ${IMAGE_NAME}:${IMAGE_TAG_ENV} \\
-                                      -t ${IMAGE_NAME}:${IMAGE_TAG_FULL} \\
-                                      --build-arg VERSION=${APP_VERSION} \\
-                                      --build-arg BUILD_DATE=${BUILD_DATE} \\
-                                      --build-arg VCS_REF=${GIT_COMMIT_SHORT} \\
-                                      --label org.opencontainers.image.created=${BUILD_DATE} \\
-                                      --label org.opencontainers.image.version=${APP_VERSION} \\
-                                      --label org.opencontainers.image.revision=${GIT_COMMIT_SHORT} \\
-                                      --label org.label-schema.build-date=${BUILD_DATE} \\
-                                      --label org.label-schema.vcs-ref=${GIT_COMMIT_SHORT} \\
-                                      --label org.label-schema.version=${APP_VERSION} \\
-                                      .
-                    """
-                }
-            }
-        }
-
-        stage('Test') {
-            agent { label 'agent-builder' }
-            steps {
-                sh """
-                docker build -t ${IMAGE_NAME}:test-${GIT_COMMIT_SHORT} -f Dockerfile.test .
-                docker images | grep ${IMAGE_NAME}
-                """
-            }
-        }
-
-        stage('Push to Docker Hub') {
-            agent { label 'agent-builder' }
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh """
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    // Get available image tags for selection
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh """
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        """
+                    }
                     
-                    # Push tất cả các tag của image
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG_LATEST}
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG_VERSION}
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG_COMMIT}
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG_BRANCH}
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG_ENV}
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG_FULL}
+                    // Default to current build's tag
+                    def defaultTag = env.IMAGE_TAG_FULL ?: "${env.APP_VERSION}-${env.GIT_COMMIT_SHORT}-${BUILD_NUMBER}"
                     
-                    # Lưu thông tin tag cho các bước triển khai tiếp theo
-                    echo "${IMAGE_TAG_FULL}" > deploy_image_tag.txt
-                    """
+                    def userInput = input(
+                        message: 'Select environment and image for deployment',
+                        parameters: [
+                            choice(name: 'DEPLOY_ENV', choices: ['dev', 'prod'], description: 'Environment to deploy to'),
+                            string(name: 'DEPLOY_IMAGE_TAG', defaultValue: defaultTag, description: 'Docker image tag to deploy (e.g., 1.0.0-a1b2c3d-42)')
+                        ]
+                    )
+                    env.DEPLOY_ENV = userInput.DEPLOY_ENV
+                    env.DEPLOY_IMAGE_TAG = userInput.DEPLOY_IMAGE_TAG
                     
-                    // Lưu tag để sử dụng cho các stage tiếp theo
-                    script {
-                        env.DEPLOY_IMAGE_TAG = env.IMAGE_TAG_FULL
+                    echo "Selected environment: ${env.DEPLOY_ENV}"
+                    echo "Selected image tag: ${env.DEPLOY_IMAGE_TAG}"
+                    
+                    // Verify the tag exists in Docker Hub
+                    def tagCheck = sh(
+                        script: """
+                        docker manifest inspect ${IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG} > /dev/null
+                        echo \$?
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (tagCheck != "0") {
+                        error "Image tag ${env.DEPLOY_IMAGE_TAG} does not exist in Docker Hub. Please specify a valid tag."
                     }
                 }
             }
@@ -226,15 +179,17 @@ pipeline {
             }
             when {
                 anyOf {
+                    expression { return env.DEPLOY_ENV == 'dev' }
+                    // Keep branch conditions as fallback
                     branch 'dev'
                     expression { return env.CHANGE_TARGET == 'dev' }
                 }
             }
             steps {
-                // Thêm bước xác nhận trước khi deploy
-                // input message: "Bạn có muốn triển khai phiên bản ${DEPLOY_IMAGE_TAG} lên môi trường Dev không?", 
-                //       ok: "Tiếp tục triển khai",
-                //       submitter: "admin,TaiKhau"
+                Thêm bước xác nhận trước khi deploy
+                input message: "Bạn có muốn triển khai phiên bản ${DEPLOY_IMAGE_TAG} lên môi trường Dev không?", 
+                      ok: "Tiếp tục triển khai",
+                      submitter: "admin,TaiKhau"
                       
                 echo "Triển khai phiên bản ${DEPLOY_IMAGE_TAG} lên Dev được xác nhận, tiếp tục..."
                 
@@ -287,6 +242,8 @@ EOF
             }
             when {
                 anyOf {
+                    bexpression { return env.DEPLOY_ENV == 'main' }
+                    // Keep branch conditions as fallback
                     branch 'main'
                     expression { return env.CHANGE_TARGET == 'main' }
                 }
@@ -344,122 +301,6 @@ EOF
             post {
                 success {
                     echo "Đã triển khai thành công lên môi trường Production"
-                }
-            }
-        }
-    }
-    
-    post {
-        success {
-            node('agent-builder') {
-                script {
-                    if (env.IS_PR == 'true' && env.GIT_COMMIT) {
-                        // Cập nhật tất cả các context với trạng thái success
-                        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_ACCESS_TOKEN')]) {
-                            // Update pr-merge context
-                            sh """
-                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
-                                 -X POST \
-                                 -H "Accept: application/vnd.github.v3+json" \
-                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
-                                 -d '{
-                                   "state": "success",
-                                   "context": "continuous-integration/jenkins/pr-merge",
-                                   "description": "Build succeeded",
-                                   "target_url": "${env.BUILD_URL}"
-                                 }'
-                            """
-                            
-                            // Update pr-head context
-                            sh """
-                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
-                                 -X POST \
-                                 -H "Accept: application/vnd.github.v3+json" \
-                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
-                                 -d '{
-                                   "state": "success",
-                                   "context": "continuous-integration/jenkins/pr-head",
-                                   "description": "Build succeeded",
-                                   "target_url": "${env.BUILD_URL}"
-                                 }'
-                            """
-                        }
-                    } else if (env.GIT_COMMIT) {
-                        // Update branch context cho non-PR builds
-                        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_ACCESS_TOKEN')]) {
-                            sh """
-                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
-                                 -X POST \
-                                 -H "Accept: application/vnd.github.v3+json" \
-                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
-                                 -d '{
-                                   "state": "success",
-                                   "context": "continuous-integration/jenkins/branch",
-                                   "description": "Build succeeded",
-                                   "target_url": "${env.BUILD_URL}"
-                                 }'
-                            """
-                        }
-                    }
-                    
-                    // Clean up old images
-                    sh '''
-                    docker system prune -af --volumes
-                    '''
-                }
-            }
-        }
-        failure {
-            node('agent-builder') {
-                script {
-                    if (env.IS_PR == 'true' && env.GIT_COMMIT) {
-                        // Cập nhật tất cả các context với trạng thái failure
-                        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_ACCESS_TOKEN')]) {
-                            // Update pr-merge context
-                            sh """
-                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
-                                 -X POST \
-                                 -H "Accept: application/vnd.github.v3+json" \
-                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
-                                 -d '{
-                                   "state": "failure",
-                                   "context": "continuous-integration/jenkins/pr-merge",
-                                   "description": "Build failed",
-                                   "target_url": "${env.BUILD_URL}"
-                                 }'
-                            """
-                            
-                            // Update pr-head context
-                            sh """
-                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
-                                 -X POST \
-                                 -H "Accept: application/vnd.github.v3+json" \
-                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
-                                 -d '{
-                                   "state": "failure",
-                                   "context": "continuous-integration/jenkins/pr-head",
-                                   "description": "Build failed",
-                                   "target_url": "${env.BUILD_URL}"
-                                 }'
-                            """
-                        }
-                    } else if (env.GIT_COMMIT) {
-                        // Update branch context cho non-PR builds
-                        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_ACCESS_TOKEN')]) {
-                            sh """
-                            curl -H "Authorization: token ${GITHUB_ACCESS_TOKEN}" \
-                                 -X POST \
-                                 -H "Accept: application/vnd.github.v3+json" \
-                                 https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/statuses/${env.GIT_COMMIT} \
-                                 -d '{
-                                   "state": "failure",
-                                   "context": "continuous-integration/jenkins/branch",
-                                   "description": "Build failed",
-                                   "target_url": "${env.BUILD_URL}"
-                                 }'
-                            """
-                        }
-                    }
                 }
             }
         }
