@@ -253,8 +253,8 @@ docker pull ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}
 
 echo "[INFO] Creating or updating environment variables file..."
 cat > .env << 'ENVFILE'
-APP_VERSION=${APP_VERSION}
-BUILD_NUMBER=${BUILD_NUMBER}
+APP_VERSION='\${APP_VERSION}'
+BUILD_NUMBER='\${BUILD_NUMBER}'
 GIT_COMMIT='\${GIT_COMMIT_SHORT}'
 DEPLOY_DATE=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
 ENVFILE
@@ -313,8 +313,8 @@ docker pull ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}
 
 echo "[INFO] Creating or updating environment variables file..."
 cat > .env << 'ENVFILE'
-APP_VERSION=${APP_VERSION}
-BUILD_NUMBER=${BUILD_NUMBER}
+APP_VERSION='\${APP_VERSION}'
+BUILD_NUMBER='\${BUILD_NUMBER}'
 GIT_COMMIT='\${GIT_COMMIT_SHORT}'
 ENVIRONMENT=production
 DEPLOY_DATE=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
