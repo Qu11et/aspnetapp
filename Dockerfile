@@ -1,5 +1,6 @@
 # Learn about building .NET container images:
 # https://github.com/dotnet/dotnet-docker/blob/main/samples/README.md
+# This Dockerfile sets up a build environment for a .NET 9.0 application.
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG TARGETARCH
 WORKDIR /source
@@ -8,7 +9,7 @@ WORKDIR /source
 COPY --link aspnetapp/*.csproj .
 RUN dotnet restore -a $TARGETARCH
 
-# Copy source code and publish app/////////
+# Copy source code and publish app
 COPY --link aspnetapp/. .
 RUN dotnet publish -a $TARGETARCH --no-restore -o /app
 
