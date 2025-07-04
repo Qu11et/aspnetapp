@@ -173,6 +173,9 @@ pipeline {
         }
 
         stage('Deploy to Dev') {
+            when {
+                expression { env.DEPLOY_ENV == 'dev' }
+            }
             agent { label 'agent-manual' }
             environment {
                 // Đặt các biến môi trường cần thiết cho Dev
@@ -245,6 +248,9 @@ EOF
         }
 
         stage('Deploy to Prod') {
+            when {
+                expression { env.DEPLOY_ENV == 'prod' }
+            }
             agent { label 'agent2' }
             environment {
                 // Đặt các biến môi trường cần thiết cho Production
