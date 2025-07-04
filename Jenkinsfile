@@ -256,7 +256,7 @@ cat > .env << 'ENVFILE'
 APP_VERSION='\${APP_VERSION}'
 BUILD_NUMBER='\${BUILD_NUMBER}'
 GIT_COMMIT='\${GIT_COMMIT_SHORT}'
-DEPLOY_DATE=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+DEPLOY_DATE='\$(date -u "+%Y-%m-%dT%H:%M:%SZ")'
 ENVFILE
 
 echo "[INFO] Restarting container..."
@@ -317,7 +317,7 @@ APP_VERSION='\${APP_VERSION}'
 BUILD_NUMBER='\${BUILD_NUMBER}'
 GIT_COMMIT='\${GIT_COMMIT_SHORT}'
 ENVIRONMENT=production
-DEPLOY_DATE=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+DEPLOY_DATE='\$(date -u "+%Y-%m-%dT%H:%M:%SZ")'
 ENVFILE
 
 echo "[INFO] Restarting container..."
