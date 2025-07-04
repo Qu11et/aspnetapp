@@ -222,7 +222,13 @@ pipeline {
         stage('Deploy to Dev') {
             agent { label 'agent1' }
             environment {
-                CONTAINER_PORT = "${DEPLOY_PORT}"
+                // Đặt các biến môi trường cần thiết cho Dev
+                CONTAINER_PORT = "${params.DEPLOY_PORT ?: '8080'}"  // Mặc định là 8080 nếu không có DEPLOY_PORT
+                ENV_APP_VERSION = "${APP_VERSION}"
+                ENV_BUILD_NUMBER = "${BUILD_NUMBER}"
+                ENV_GIT_COMMIT = "${GIT_COMMIT_SHORT}"
+                ENV_ENVIRONMENT = "development"
+                ENV_DEPLOY_IMAGE_TAG = "${DEPLOY_IMAGE_TAG}"
             }
             when {
                 anyOf {
@@ -241,31 +247,36 @@ pipeline {
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@'\${GCP_VM_DEV}' << 'EOF'
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_DEV} << EOF
 set -e
 trap 'echo "[ERROR] Deployment failed on \$(hostname)!" >&2; exit 1' ERR
 
 echo "[INFO] Switching to deployment directory..."
-mkdir -p $DEPLOY_DIR && cd $DEPLOY_DIR
+mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
 
-echo "[INFO] Pulling Docker image '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'..."
-docker pull '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
+echo "[INFO] Pulling Docker image ${IMAGE_NAME}:${ENV_DEPLOY_IMAGE_TAG}..."
+docker pull ${IMAGE_NAME}:${ENV_DEPLOY_IMAGE_TAG}
 
-echo "[INFO] Creating or updating environment variables file..."
-cat > .env << 'ENVFILE'
-APP_VERSION='\${APP_VERSION}'
-BUILD_NUMBER='\${BUILD_NUMBER}'
-GIT_COMMIT='\${GIT_COMMIT_SHORT}'
-DEPLOY_DATE=\$(date -u "+%Y-%m-%dT%H:%M:%SZ")
-ENVFILE
-
-echo "[INFO] Restarting container..."
+echo "[INFO] Restarting container with environment variables..."
 docker stop aspnetapp || true
 docker rm aspnetapp || true
-docker run -d --env-file .env -p '\${CONTAINER_PORT}':8080 --name aspnetapp '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
+
+# Thiết lập biến ngày triển khai
+DEPLOY_DATE=\$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+
+# Chạy container với biến môi trường từ environment block của Jenkins
+docker run -d \\
+  -e APP_VERSION=${ENV_APP_VERSION} \\
+  -e BUILD_NUMBER=${ENV_BUILD_NUMBER} \\
+  -e GIT_COMMIT=${ENV_GIT_COMMIT} \\
+  -e ENVIRONMENT=${ENV_ENVIRONMENT} \\
+  -e DEPLOY_DATE="\$DEPLOY_DATE" \\
+  -p ${CONTAINER_PORT}:8080 \\
+  --name aspnetapp \\
+  ${IMAGE_NAME}:${ENV_DEPLOY_IMAGE_TAG}
 
 echo "[INFO] Tagging current deployment..."
-echo '\${DEPLOY_IMAGE_TAG}' > current_deployment.txt
+echo "${ENV_DEPLOY_IMAGE_TAG}" > current_deployment.txt
 
 echo "[SUCCESS] Dev Deployment complete on \$(hostname)"
 EOF
@@ -283,7 +294,13 @@ EOF
         stage('Deploy to Prod') {
             agent { label 'agent2' }
             environment {
-                CONTAINER_PORT = "${DEPLOY_PORT}"
+                // Đặt các biến môi trường cần thiết cho Production
+                CONTAINER_PORT = "${params.DEPLOY_PORT ?: '8080'}"  // Mặc định là 8080 nếu không có DEPLOY_PORT
+                ENV_APP_VERSION = "${APP_VERSION}"
+                ENV_BUILD_NUMBER = "${BUILD_NUMBER}"
+                ENV_GIT_COMMIT = "${GIT_COMMIT_SHORT}"
+                ENV_ENVIRONMENT = "production" 
+                ENV_DEPLOY_IMAGE_TAG = "${DEPLOY_IMAGE_TAG}"
             }
             when {
                 anyOf {
@@ -301,32 +318,36 @@ EOF
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@'\${GCP_VM_PROD}' << 'EOF'
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_PROD} << EOF
 set -e
 trap 'echo "[ERROR] Deployment failed on \$(hostname)!" >&2; exit 1' ERR
 
 echo "[INFO] Switching to deployment directory..."
-mkdir -p '\$DEPLOY_DIR' && cd '\$DEPLOY_DIR'
+mkdir -p ${DEPLOY_DIR} && cd ${DEPLOY_DIR}
 
-echo "[INFO] Pulling Docker image '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'..."
-docker pull '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
+echo "[INFO] Pulling Docker image ${IMAGE_NAME}:${ENV_DEPLOY_IMAGE_TAG}..."
+docker pull ${IMAGE_NAME}:${ENV_DEPLOY_IMAGE_TAG}
 
-echo "[INFO] Creating or updating environment variables file..."
-cat > .env << 'ENVFILE'
-APP_VERSION='\${APP_VERSION}'
-BUILD_NUMBER='\${BUILD_NUMBER}'
-GIT_COMMIT='\${GIT_COMMIT_SHORT}'
-ENVIRONMENT=production
-DEPLOY_DATE=\$(date -u "+%Y-%m-%dT%H:%M:%SZ")
-ENVFILE
-
-echo "[INFO] Restarting container..."
+echo "[INFO] Restarting container with environment variables..."
 docker stop aspnetapp || true
 docker rm aspnetapp || true
-docker run -d --env-file .env -p '\${CONTAINER_PORT}':8080 --name aspnetapp '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
+
+# Thiết lập biến ngày triển khai
+DEPLOY_DATE=\$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+
+# Chạy container với biến môi trường từ environment block của Jenkins
+docker run -d \\
+  -e APP_VERSION=${ENV_APP_VERSION} \\
+  -e BUILD_NUMBER=${ENV_BUILD_NUMBER} \\
+  -e GIT_COMMIT=${ENV_GIT_COMMIT} \\
+  -e ENVIRONMENT=${ENV_ENVIRONMENT} \\
+  -e DEPLOY_DATE="\$DEPLOY_DATE" \\
+  -p ${CONTAINER_PORT}:8080 \\
+  --name aspnetapp \\
+  ${IMAGE_NAME}:${ENV_DEPLOY_IMAGE_TAG}
 
 echo "[INFO] Tagging current deployment..."
-echo "'\${DEPLOY_IMAGE_TAG}'" > current_deployment.txt
+echo "${ENV_DEPLOY_IMAGE_TAG}" > current_deployment.txt
 
 echo "[SUCCESS] Prod Deployment complete on \$(hostname)"
 EOF
