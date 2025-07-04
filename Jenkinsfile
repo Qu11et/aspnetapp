@@ -241,9 +241,9 @@ pipeline {
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_DEV} << EOF
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_DEV} << 'EOF'
 set -e
-trap 'echo "[ERROR] Deployment failed on \$HOSTNAME!" >&2; exit 1' ERR
+trap 'echo "[ERROR] Deployment failed on \$(hostname)!" >&2; exit 1' ERR
 
 echo "[INFO] Switching to deployment directory..."
 mkdir -p $DEPLOY_DIR && cd $DEPLOY_DIR
@@ -256,7 +256,7 @@ cat > .env << 'ENVFILE'
 APP_VERSION=${APP_VERSION}
 BUILD_NUMBER=${BUILD_NUMBER}
 GIT_COMMIT=${GIT_COMMIT_SHORT}
-DEPLOY_DATE=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+DEPLOY_DATE=\$(date -u "+%Y-%m-%dT%H:%M:%SZ")
 ENVFILE
 
 echo "[INFO] Restarting container..."
@@ -267,7 +267,7 @@ docker run -d --env-file .env -p ${CONTAINER_PORT}:8080 --name aspnetapp ${IMAGE
 echo "[INFO] Tagging current deployment..."
 echo "${DEPLOY_IMAGE_TAG}" > current_deployment.txt
 
-echo "[SUCCESS] Dev Deployment complete on \$HOSTNAME"
+echo "[SUCCESS] Dev Deployment complete on \$(hostname)"
 EOF
                         """
                     }
@@ -301,9 +301,9 @@ EOF
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_PROD} << EOF
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_PROD} << 'EOF'
 set -e
-trap 'echo "[ERROR] Deployment failed on \$HOSTNAME!" >&2; exit 1' ERR
+trap 'echo "[ERROR] Deployment failed on \$(hostname)!" >&2; exit 1' ERR
 
 echo "[INFO] Switching to deployment directory..."
 mkdir -p $DEPLOY_DIR && cd $DEPLOY_DIR
@@ -317,7 +317,7 @@ APP_VERSION=${APP_VERSION}
 BUILD_NUMBER=${BUILD_NUMBER}
 GIT_COMMIT=${GIT_COMMIT_SHORT}
 ENVIRONMENT=production
-DEPLOY_DATE=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+DEPLOY_DATE=\$(date -u "+%Y-%m-%dT%H:%M:%SZ")
 ENVFILE
 
 echo "[INFO] Backing up current container if exists..."
@@ -335,7 +335,7 @@ docker run -d --env-file .env -p ${CONTAINER_PORT}:8080 --name aspnetapp ${IMAGE
 echo "[INFO] Tagging current deployment..."
 echo "${DEPLOY_IMAGE_TAG}" > current_deployment.txt
 
-echo "[SUCCESS] Prod Deployment complete on \$HOSTNAME"
+echo "[SUCCESS] Prod Deployment complete on \$(hostname)"
 EOF
                         """
                     }
