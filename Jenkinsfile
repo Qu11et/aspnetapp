@@ -99,16 +99,26 @@ pipeline {
             }
         }
 
+        stage('Environment Selection') {
+            agent { label 'agent-builder' }
+            steps {
+                script {
+                    env.SELECTED_ENVIRONMENT = input message: 'Select deployment environment:', 
+                                                     parameters: [choice(name: 'ENVIRONMENT', 
+                                                                       choices: ['dev', 'prod'], 
+                                                                       description: 'Choose the environment to deploy to')]
+                    echo "Selected environment: ${env.SELECTED_ENVIRONMENT}"
+                }
+            }
+        }
+
         stage('Deploy to Dev') {
             agent { label 'agent1' }
             environment {
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                anyOf {
-                    branch 'dev'
-                    expression { return env.CHANGE_TARGET == 'dev' }
-                }
+                expression { return env.SELECTED_ENVIRONMENT == 'dev' }
             }
             steps {
                 // Giữ nguyên các bước triển khai Dev
@@ -144,10 +154,7 @@ EOF
                 CONTAINER_PORT = "${DEPLOY_PORT}"
             }
             when {
-                anyOf {
-                    branch 'main'
-                    expression { return env.CHANGE_TARGET == 'main' }
-                }
+                expression { return env.SELECTED_ENVIRONMENT == 'prod' }
             }
             steps {
                 // Giữ nguyên các bước triển khai Prod
