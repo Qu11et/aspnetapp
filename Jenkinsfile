@@ -17,7 +17,7 @@ pipeline {
         REPO_NAME = credentials('repo-name')
 
         // Ngày và giờ build (sử dụng định dạng ISO)
-        BUILD_DATE = sh(script: 'date -u "+%Y-%m-%dT%H:%M:%SZ"', returnStdout: true).trim()
+        BUILD_DATE = "${new Date().format('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'', TimeZone.getTimeZone('UTC'))}"
     }
 
     stages {
