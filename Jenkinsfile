@@ -236,20 +236,20 @@ pipeline {
                 //       ok: "Tiếp tục triển khai",
                 //       submitter: "admin,TaiKhau"
                       
-                echo "Triển khai phiên bản ${DEPLOY_IMAGE_TAG} lên Dev được xác nhận, tiếp tục..."
+                echo "Triển khai phiên bản '\${DEPLOY_IMAGE_TAG}' lên Dev được xác nhận, tiếp tục..."
                 
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_DEV} << 'EOF'
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@'\${GCP_VM_DEV}' << 'EOF'
 set -e
 trap 'echo "[ERROR] Deployment failed on \$(hostname)!" >&2; exit 1' ERR
 
 echo "[INFO] Switching to deployment directory..."
 mkdir -p $DEPLOY_DIR && cd $DEPLOY_DIR
 
-echo "[INFO] Pulling Docker image ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}..."
-docker pull ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}
+echo "[INFO] Pulling Docker image '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'..."
+docker pull '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
 
 echo "[INFO] Creating or updating environment variables file..."
 cat > .env << 'ENVFILE'
@@ -262,10 +262,10 @@ ENVFILE
 echo "[INFO] Restarting container..."
 docker stop aspnetapp || true
 docker rm aspnetapp || true
-docker run -d --env-file .env -p ${CONTAINER_PORT}:8080 --name aspnetapp ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}
+docker run -d --env-file .env -p '\${CONTAINER_PORT}':8080 --name aspnetapp '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
 
 echo "[INFO] Tagging current deployment..."
-echo "${DEPLOY_IMAGE_TAG}" > current_deployment.txt
+echo '\${DEPLOY_IMAGE_TAG}' > current_deployment.txt
 
 echo "[SUCCESS] Dev Deployment complete on \$(hostname)"
 EOF
@@ -296,20 +296,20 @@ EOF
                 //       ok: "Xác nhận triển khai",
                 //       submitter: "admin,TaiKhau"
 
-                echo "Triển khai phiên bản ${DEPLOY_IMAGE_TAG} lên Prod được xác nhận, tiếp tục..."
+                echo "Triển khai phiên bản '\${DEPLOY_IMAGE_TAG}' lên Prod được xác nhận, tiếp tục..."
                 
                 withCredentials([file(credentialsId: 'ssh-private-key-file', variable: 'SSH_KEY')]) {
                     script {
                         sh """
-                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@${GCP_VM_PROD} << 'EOF'
+                        ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@'\${GCP_VM_PROD}' << 'EOF'
 set -e
 trap 'echo "[ERROR] Deployment failed on \$(hostname)!" >&2; exit 1' ERR
 
 echo "[INFO] Switching to deployment directory..."
-mkdir -p $DEPLOY_DIR && cd $DEPLOY_DIR
+mkdir -p '\$DEPLOY_DIR' && cd '\$DEPLOY_DIR'
 
-echo "[INFO] Pulling Docker image ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}..."
-docker pull ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}
+echo "[INFO] Pulling Docker image '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'..."
+docker pull '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
 
 echo "[INFO] Creating or updating environment variables file..."
 cat > .env << 'ENVFILE'
@@ -323,10 +323,10 @@ ENVFILE
 echo "[INFO] Restarting container..."
 docker stop aspnetapp || true
 docker rm aspnetapp || true
-docker run -d --env-file .env -p ${CONTAINER_PORT}:8080 --name aspnetapp ${IMAGE_NAME}:${DEPLOY_IMAGE_TAG}
+docker run -d --env-file .env -p '\${CONTAINER_PORT}':8080 --name aspnetapp '\${IMAGE_NAME}':'\${DEPLOY_IMAGE_TAG}'
 
 echo "[INFO] Tagging current deployment..."
-echo "${DEPLOY_IMAGE_TAG}" > current_deployment.txt
+echo "'\${DEPLOY_IMAGE_TAG}'" > current_deployment.txt
 
 echo "[SUCCESS] Prod Deployment complete on \$(hostname)"
 EOF
