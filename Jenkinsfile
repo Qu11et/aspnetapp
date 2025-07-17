@@ -2,7 +2,7 @@ pipeline {
     agent none
 
     environment {
-        // Thông tin chung 
+        // Thông tin chung //test
         SSH_USER = credentials('ssh-user')
         DEPLOY_DIR = credentials('deploy-dir')
         GCP_VM_DEV = credentials('gcp-vm-dev')
