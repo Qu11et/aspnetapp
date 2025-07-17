@@ -174,6 +174,9 @@ pipeline {
 
         stage('Deploy to Dev') {
             agent { label 'agent-manual' }
+            when {
+                expression { env.DEPLOY_ENV == 'dev' }
+            }
             environment {
                 // Đặt các biến môi trường cần thiết cho Dev
                 CONTAINER_PORT = "${params.DEPLOY_PORT ?: '8080'}"  // Mặc định là 8080 nếu không có DEPLOY_PORT
@@ -246,6 +249,9 @@ EOF
 
         stage('Deploy to Prod') {
             agent { label 'agent2' }
+            when {
+                expression { env.DEPLOY_ENV == 'prod' }
+            }
             environment {
                 // Đặt các biến môi trường cần thiết cho Production
                 CONTAINER_PORT = "${params.DEPLOY_PORT ?: '8080'}"  // Mặc định là 8080 nếu không có DEPLOY_PORT
