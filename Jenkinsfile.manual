@@ -188,6 +188,7 @@ pipeline {
             }
             when {
                 anyOf {
+                    expression { env.DEPLOY_ENV == 'dev' }
                     branch 'dev'
                     expression { return env.CHANGE_TARGET == 'dev' }
                 }
@@ -263,6 +264,7 @@ EOF
             }
             when {
                 anyOf {
+                    expression { env.DEPLOY_ENV == 'prod' }
                     branch 'main'
                     expression { return env.CHANGE_TARGET == 'main' }
                 }
